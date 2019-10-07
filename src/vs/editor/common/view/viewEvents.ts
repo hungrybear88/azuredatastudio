@@ -2,14 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
+import * as errors from 'vs/base/common/errors';
+import { Disposable, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
+import { ScrollEvent } from 'vs/base/common/scrollable';
+import { ConfigurationChangedEvent, EditorOption } from 'vs/editor/common/config/editorOptions';
 import { Range } from 'vs/editor/common/core/range';
 import { Selection } from 'vs/editor/common/core/selection';
-import { ScrollEvent } from 'vs/base/common/scrollable';
-import { IConfigurationChangedEvent } from 'vs/editor/common/config/editorOptions';
-import * as errors from 'vs/base/common/errors';
-import { IDisposable, Disposable, toDisposable } from 'vs/base/common/lifecycle';
 import { ScrollType } from 'vs/editor/common/editorCommon';
 
 export const enum ViewEventType {
@@ -35,30 +34,14 @@ export class ViewConfigurationChangedEvent {
 
 	public readonly type = ViewEventType.ViewConfigurationChanged;
 
-	public readonly canUseLayerHinting: boolean;
-	public readonly pixelRatio: boolean;
-	public readonly editorClassName: boolean;
-	public readonly lineHeight: boolean;
-	public readonly readOnly: boolean;
-	public readonly accessibilitySupport: boolean;
-	public readonly emptySelectionClipboard: boolean;
-	public readonly layoutInfo: boolean;
-	public readonly fontInfo: boolean;
-	public readonly viewInfo: boolean;
-	public readonly wrappingInfo: boolean;
+	public readonly _source: ConfigurationChangedEvent;
 
-	constructor(source: IConfigurationChangedEvent) {
-		this.canUseLayerHinting = source.canUseLayerHinting;
-		this.pixelRatio = source.pixelRatio;
-		this.editorClassName = source.editorClassName;
-		this.lineHeight = source.lineHeight;
-		this.readOnly = source.readOnly;
-		this.accessibilitySupport = source.accessibilitySupport;
-		this.emptySelectionClipboard = source.emptySelectionClipboard;
-		this.layoutInfo = source.layoutInfo;
-		this.fontInfo = source.fontInfo;
-		this.viewInfo = source.viewInfo;
-		this.wrappingInfo = source.wrappingInfo;
+	constructor(source: ConfigurationChangedEvent) {
+		this._source = source;
+	}
+
+	public hasChanged(id: EditorOption): boolean {
+		return this._source.hasChanged(id);
 	}
 }
 
@@ -197,7 +180,13 @@ export class ViewRevealRangeRequestEvent {
 
 	public readonly scrollType: ScrollType;
 
-	constructor(range: Range, verticalType: VerticalRevealType, revealHorizontal: boolean, scrollType: ScrollType) {
+	/**
+	 * Source of the call that caused the event.
+	 */
+	readonly source: string;
+
+	constructor(source: string, range: Range, verticalType: VerticalRevealType, revealHorizontal: boolean, scrollType: ScrollType) {
+		this.source = source;
 		this.range = range;
 		this.verticalType = verticalType;
 		this.revealHorizontal = revealHorizontal;
@@ -255,9 +244,6 @@ export class ViewTokensChangedEvent {
 export class ViewThemeChangedEvent {
 
 	public readonly type = ViewEventType.ViewThemeChanged;
-
-	constructor() {
-	}
 }
 
 export class ViewTokensColorsChangedEvent {
@@ -281,9 +267,6 @@ export class ViewZonesChangedEvent {
 export class ViewLanguageConfigurationEvent {
 
 	public readonly type = ViewEventType.ViewLanguageConfigurationChanged;
-
-	constructor() {
-	}
 }
 
 export type ViewEvent = (
@@ -311,7 +294,7 @@ export interface IViewEventListener {
 
 export class ViewEventEmitter extends Disposable {
 	private _listeners: IViewEventListener[];
-	private _collector: ViewEventsCollector;
+	private _collector: ViewEventsCollector | null;
 	private _collectorCnt: number;
 
 	constructor() {
@@ -331,13 +314,13 @@ export class ViewEventEmitter extends Disposable {
 		if (this._collectorCnt === 1) {
 			this._collector = new ViewEventsCollector();
 		}
-		return this._collector;
+		return this._collector!;
 	}
 
 	protected _endEmit(): void {
 		this._collectorCnt--;
 		if (this._collectorCnt === 0) {
-			const events = this._collector.finalize();
+			const events = this._collector!.finalize();
 			this._collector = null;
 			if (events.length > 0) {
 				this._emit(events);
@@ -382,7 +365,7 @@ export class ViewEventsCollector {
 
 	public finalize(): ViewEvent[] {
 		let result = this._events;
-		this._events = null;
+		this._events = [];
 		return result;
 	}
 

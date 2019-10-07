@@ -6,7 +6,7 @@
 'use strict';
 
 import * as nls from 'vscode-nls';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import { AgentDialog } from './agentDialog';
 import { ProxyData } from '../data/proxyData';
 
@@ -36,37 +36,43 @@ export class ProxyDialog extends AgentDialog<ProxyData>  {
 	private static readonly PowerShellLabel: string = localize('createProxy.PowerShell', 'PowerShell');
 	private static readonly SubSystemHeadingLabel: string = localize('createProxy.subSystemHeading', 'Active to the following subsytems');
 
+	private readonly NewProxyDialog = 'NewProxyDialogOpened';
+	private readonly EditProxyDialog = 'EditProxyDialogOpened';
+
 	// UI Components
-	private generalTab: sqlops.window.modelviewdialog.DialogTab;
+	private generalTab: azdata.window.DialogTab;
 
 	// General tab controls
-	private proxyNameTextBox: sqlops.InputBoxComponent;
-	private credentialNameDropDown: sqlops.DropDownComponent;
-	private descriptionTextBox: sqlops.InputBoxComponent;
-	private subsystemCheckBox: sqlops.CheckBoxComponent;
-	private operatingSystemCheckBox: sqlops.CheckBoxComponent;
-	private replicationSnapshotCheckBox: sqlops.CheckBoxComponent;
-	private replicationTransactionLogCheckBox: sqlops.CheckBoxComponent;
-	private replicationDistributorCheckBox: sqlops.CheckBoxComponent;
-	private replicationMergeCheckbox: sqlops.CheckBoxComponent;
-	private replicationQueueReaderCheckbox: sqlops.CheckBoxComponent;
-	private sqlQueryCheckBox: sqlops.CheckBoxComponent;
-	private sqlCommandCheckBox: sqlops.CheckBoxComponent;
-	private sqlIntegrationServicesPackageCheckbox: sqlops.CheckBoxComponent;
-	private powershellCheckBox: sqlops.CheckBoxComponent;
+	private proxyNameTextBox: azdata.InputBoxComponent;
+	private credentialNameDropDown: azdata.DropDownComponent;
+	private descriptionTextBox: azdata.InputBoxComponent;
+	private subsystemCheckBox: azdata.CheckBoxComponent;
+	private operatingSystemCheckBox: azdata.CheckBoxComponent;
+	private replicationSnapshotCheckBox: azdata.CheckBoxComponent;
+	private replicationTransactionLogCheckBox: azdata.CheckBoxComponent;
+	private replicationDistributorCheckBox: azdata.CheckBoxComponent;
+	private replicationMergeCheckbox: azdata.CheckBoxComponent;
+	private replicationQueueReaderCheckbox: azdata.CheckBoxComponent;
+	private sqlQueryCheckBox: azdata.CheckBoxComponent;
+	private sqlCommandCheckBox: azdata.CheckBoxComponent;
+	private sqlIntegrationServicesPackageCheckbox: azdata.CheckBoxComponent;
+	private powershellCheckBox: azdata.CheckBoxComponent;
 
-	private credentials: sqlops.CredentialInfo[];
+	private credentials: azdata.CredentialInfo[];
+	private isEdit: boolean = false;
 
-	constructor(ownerUri: string, proxyInfo: sqlops.AgentProxyInfo = undefined, credentials: sqlops.CredentialInfo[]) {
+	constructor(ownerUri: string, proxyInfo: azdata.AgentProxyInfo = undefined, credentials: azdata.CredentialInfo[]) {
 		super(
 			ownerUri,
 			new ProxyData(ownerUri, proxyInfo),
 			proxyInfo ? ProxyDialog.EditDialogTitle : ProxyDialog.CreateDialogTitle);
 		this.credentials = credentials;
+		this.isEdit = proxyInfo ? true : false;
+		this.dialogName = this.isEdit ? this.EditProxyDialog : this.NewProxyDialog;
 	}
 
-	protected async initializeDialog(dialog: sqlops.window.modelviewdialog.Dialog) {
-		this.generalTab = sqlops.window.modelviewdialog.createTab(ProxyDialog.GeneralTabText);
+	protected async initializeDialog(dialog: azdata.window.Dialog) {
+		this.generalTab = azdata.window.createTab(ProxyDialog.GeneralTabText);
 
 
 		this.initializeGeneralTab();
@@ -78,8 +84,11 @@ export class ProxyDialog extends AgentDialog<ProxyData>  {
 		this.generalTab.registerContent(async view => {
 
 			this.proxyNameTextBox = view.modelBuilder.inputBox()
-				.withProperties({width: 420})
-				.component();
+				.withProperties({
+					width: 420,
+					ariaLabel: ProxyDialog.ProxyNameTextBoxLabel,
+					placeHolder: ProxyDialog.ProxyNameTextBoxLabel
+				}).component();
 
 			this.credentialNameDropDown = view.modelBuilder.dropDown()
 				.withProperties({
@@ -94,9 +103,10 @@ export class ProxyDialog extends AgentDialog<ProxyData>  {
 				.withProperties({
 					width: 420,
 					multiline: true,
-					height: 300
-				})
-				.component();
+					height: 300,
+					ariaLabel: ProxyDialog.DescriptionTextBoxLabel,
+					placeHolder: ProxyDialog.DescriptionTextBoxLabel
+				}).component();
 
 			this.subsystemCheckBox = view.modelBuilder.checkBox()
 				.withProperties({

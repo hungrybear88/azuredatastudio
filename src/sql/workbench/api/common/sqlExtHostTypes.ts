@@ -2,9 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import { TreeItem } from 'vs/workbench/api/node/extHostTypes';
+import { nb, IConnectionProfile } from 'azdata';
+import * as vsExtTypes from 'vs/workbench/api/common/extHostTypes';
 
 // SQL added extension host types
 export enum ServiceOptionType {
@@ -143,6 +143,7 @@ export enum ModelComponentTypes {
 	NavContainer,
 	DivContainer,
 	FlexContainer,
+	SplitViewContainer,
 	Card,
 	InputBox,
 	DropDown,
@@ -163,7 +164,43 @@ export enum ModelComponentTypes {
 	TreeComponent,
 	FileBrowserTree,
 	Editor,
-	Dom
+	DiffEditor,
+	Dom,
+	Hyperlink,
+	Image
+}
+
+export enum ColumnSizingMode {
+	ForceFit = 0,	// all columns will be sized to fit in viewable space, no horiz scroll bar
+	AutoFit = 1,	// columns will be ForceFit up to a certain number; currently 3.  At 4 or more the behavior will switch to NO force fit
+	DataFit = 2		// columns use sizing based on cell data, horiz scroll bar present if more cells than visible in view area
+}
+
+export enum AgentSubSystem {
+	TransactSql = 1,
+	ActiveScripting = 2,
+	CmdExec = 3,
+	Snapshot = 4,
+	LogReader = 5,
+	Distribution = 6,
+	Merge = 7,
+	QueueReader = 8,
+	AnalysisQuery = 9,
+	AnalysisCommands = 10,
+	Ssis = 11,
+	PowerShell = 12
+}
+
+export enum StepCompletionAction {
+	QuitWithSuccess = 1,
+	QuitWithFailure = 2,
+	GoToNextStep = 3,
+	GoToStep = 4
+}
+
+export enum ExtensionNodeType {
+	Server = 'Server',
+	Database = 'Database'
 }
 
 export interface IComponentShape {
@@ -186,7 +223,9 @@ export enum ComponentEventType {
 	validityChanged,
 	onMessage,
 	onSelectedRowChanged,
-	onComponentCreated
+	onComponentCreated,
+	onCellAction,
+	onEnterKeyPressed
 }
 
 export interface IComponentEventArgs {
@@ -196,6 +235,7 @@ export interface IComponentEventArgs {
 
 export interface IModelViewDialogDetails {
 	title: string;
+	isWide: boolean;
 	content: string | number[];
 	okButton: number;
 	cancelButton: number;
@@ -212,6 +252,7 @@ export interface IModelViewButtonDetails {
 	label: string;
 	enabled: boolean;
 	hidden: boolean;
+	focused?: boolean;
 }
 
 export interface IModelViewWizardPageDetails {
@@ -245,6 +286,7 @@ export enum MessageLevel {
 export interface DialogMessage {
 	text: string;
 	level?: MessageLevel;
+	description?: string;
 }
 
 /// Card-related APIs that need to be here to avoid early load issues
@@ -260,9 +302,15 @@ export interface CardProperties {
 	label: string;
 	value?: string;
 	actions?: ActionDescriptor[];
+	descriptions?: CardDescriptionItem[];
 	status?: StatusIndicator;
 	selected?: boolean;
 	cardType: CardType;
+}
+
+export interface CardDescriptionItem {
+	label: string;
+	value?: string;
 }
 
 export interface ActionDescriptor {
@@ -284,7 +332,10 @@ export enum DataProviderType {
 	QueryProvider = 'QueryProvider',
 	AdminServicesProvider = 'AdminServicesProvider',
 	AgentServicesProvider = 'AgentServicesProvider',
-	CapabilitiesProvider = 'CapabilitiesProvider'
+	CapabilitiesProvider = 'CapabilitiesProvider',
+	ObjectExplorerNodeProvider = 'ObjectExplorerNodeProvider',
+	SerializationProvider = 'SerializationProvider',
+	IconProvider = 'IconProvider'
 }
 
 export enum DeclarativeDataType {
@@ -296,7 +347,8 @@ export enum DeclarativeDataType {
 
 export enum CardType {
 	VerticalButton = 'VerticalButton',
-	Details = 'Details'
+	Details = 'Details',
+	ListItem = 'ListItem'
 }
 
 export enum Orientation {
@@ -308,8 +360,31 @@ export interface ToolbarLayout {
 	orientation: Orientation;
 }
 
-export class TreeComponentItem extends TreeItem {
+export class TreeComponentItem extends vsExtTypes.TreeItem {
+	label?: string;
 	checked?: boolean;
+}
+
+export enum AzureResource {
+	ResourceManagement = 0,
+	Sql = 1
+}
+
+export class TreeItem extends vsExtTypes.TreeItem {
+	label?: string;
+	payload: IConnectionProfile;
+	providerHandle: string;
+}
+
+export interface ServerInfoOption {
+	isBigDataCluster: boolean;
+	clusterEndpoints: ClusterEndpoint;
+}
+
+export interface ClusterEndpoint {
+	serviceName: string;
+	ipAddress: string;
+	port: number;
 }
 
 export class SqlThemeIcon {
@@ -410,3 +485,309 @@ export class SqlThemeIcon {
 		this.id = id;
 	}
 }
+
+export interface INotebookManagerDetails {
+	handle: number;
+	hasContentManager: boolean;
+	hasServerManager: boolean;
+}
+
+export interface INotebookSessionDetails {
+	readonly sessionId: number;
+	readonly canChangeKernels: boolean;
+	readonly id: string;
+	readonly path: string;
+	readonly name: string;
+	readonly type: string;
+	readonly status: string;
+	readonly kernelDetails: INotebookKernelDetails;
+}
+
+export interface INotebookKernelDetails {
+	readonly kernelId: number;
+	readonly id: string;
+	readonly name: string;
+	readonly supportsIntellisense: boolean;
+	readonly requiresConnection: boolean;
+	readonly info?: any;
+}
+
+export interface INotebookFutureDetails {
+	readonly futureId: number;
+	readonly msg: any;
+}
+
+export enum FutureMessageType {
+	Reply = 0,
+	StdIn = 1,
+	IOPub = 2
+}
+
+export interface INotebookFutureDone {
+	succeeded: boolean;
+	rejectReason: string;
+	message: nb.IShellMessage;
+}
+
+export interface ICellRange {
+	readonly start: number;
+	readonly end: number;
+}
+
+export class CellRange {
+
+	protected _start: number;
+	protected _end: number;
+
+	get start(): number {
+		return this._start;
+	}
+
+	get end(): number {
+		return this._end;
+	}
+
+	constructor(start: number, end: number) {
+		if (typeof (start) !== 'number' || typeof (start) !== 'number' || start < 0 || end < 0) {
+			throw new Error('Invalid arguments');
+		}
+
+		// Logic taken from range handling.
+		if (start <= end) {
+			this._start = start;
+			this._end = end;
+		} else {
+			this._start = end;
+			this._end = start;
+		}
+	}
+}
+
+export interface ISingleNotebookEditOperation {
+	range: ICellRange;
+	cell: Partial<nb.ICellContents>;
+	forceMoveMarkers: boolean;
+}
+
+export class ConnectionProfile {
+	get providerId(): string {
+		return this.options['providerId'];
+	}
+
+	set providerId(value: string) {
+		this.options['providerId'] = value;
+	}
+
+	get connectionId(): string {
+		return this.options['connectionId'];
+	}
+
+	set connectionId(value: string) {
+		this.options['connectionId'] = value;
+	}
+
+	get connectionName(): string {
+		return this.options['connectionName'];
+	}
+
+	set connectionName(value: string) {
+		this.options['connectionName'] = value;
+	}
+
+	get serverName(): string {
+		return this.options['serverName'];
+	}
+
+	set serverName(value: string) {
+		this.options['serverName'] = value;
+	}
+
+	get databaseName(): string {
+		return this.options['databaseName'];
+	}
+
+	set databaseName(value: string) {
+		this.options['databaseName'] = value;
+	}
+
+	get userName(): string {
+		return this.options['userName'];
+	}
+
+	set userName(value: string) {
+		this.options['userName'] = value;
+	}
+
+	get password(): string {
+		return this.options['password'];
+	}
+
+	set password(value: string) {
+		this.options['password'] = value;
+	}
+
+	get authenticationType(): string {
+		return this.options['authenticationType'];
+	}
+
+	set authenticationType(value: string) {
+		this.options['authenticationType'] = value;
+	}
+
+	get savePassword(): boolean {
+		return this.options['savePassword'];
+	}
+
+	set savePassword(value: boolean) {
+		this.options['savePassword'] = value;
+	}
+
+	get groupFullName(): string {
+		return this.options['groupFullName'];
+	}
+
+	set groupFullName(value: string) {
+		this.options['groupFullName'] = value;
+	}
+
+	get groupId(): string {
+		return this.options['groupId'];
+	}
+
+	set groupId(value: string) {
+		this.options['groupId'] = value;
+	}
+
+	get saveProfile(): boolean {
+		return this.options['groupId'];
+	}
+
+	set saveProfile(value: boolean) {
+		this.options['groupId'] = value;
+	}
+
+	get azureTenantId(): string {
+		return this.options['azureTenantId'];
+	}
+
+	set azureTenantId(value: string) {
+		this.options['azureTenantId'] = value;
+	}
+
+	options: Map<string, any> = new Map<string, any>();
+
+	static createFrom(options: Map<string, any>): ConnectionProfile {
+		let profile = new ConnectionProfile();
+		profile.options = options;
+		return profile;
+	}
+}
+
+export enum SchemaUpdateAction {
+	Delete = 0,
+	Change = 1,
+	Add = 2
+}
+
+export enum SchemaDifferenceType {
+	Object = 0,
+	Property = 1
+}
+
+export enum SchemaCompareEndpointType {
+	Database = 0,
+	Dacpac = 1
+}
+
+export enum SchemaObjectType {
+	Aggregates = 0,
+	ApplicationRoles = 1,
+	Assemblies = 2,
+	AssemblyFiles = 3,
+	AsymmetricKeys = 4,
+	BrokerPriorities = 5,
+	Certificates = 6,
+	ColumnEncryptionKeys = 7,
+	ColumnMasterKeys = 8,
+	Contracts = 9,
+	DatabaseOptions = 10,
+	DatabaseRoles = 11,
+	DatabaseTriggers = 12,
+	Defaults = 13,
+	ExtendedProperties = 14,
+	ExternalDataSources = 15,
+	ExternalFileFormats = 16,
+	ExternalTables = 17,
+	Filegroups = 18,
+	FileTables = 19,
+	FullTextCatalogs = 20,
+	FullTextStoplists = 21,
+	MessageTypes = 22,
+	PartitionFunctions = 23,
+	PartitionSchemes = 24,
+	Permissions = 25,
+	Queues = 26,
+	RemoteServiceBindings = 27,
+	RoleMembership = 28,
+	Rules = 29,
+	ScalarValuedFunctions = 30,
+	SearchPropertyLists = 31,
+	SecurityPolicies = 32,
+	Sequences = 33,
+	Services = 34,
+	Signatures = 35,
+	StoredProcedures = 36,
+	SymmetricKeys = 37,
+	Synonyms = 38,
+	Tables = 39,
+	TableValuedFunctions = 40,
+	UserDefinedDataTypes = 41,
+	UserDefinedTableTypes = 42,
+	ClrUserDefinedTypes = 43,
+	Users = 44,
+	Views = 45,
+	XmlSchemaCollections = 46,
+	Audits = 47,
+	Credentials = 48,
+	CryptographicProviders = 49,
+	DatabaseAuditSpecifications = 50,
+	DatabaseEncryptionKeys = 51,
+	DatabaseScopedCredentials = 52,
+	Endpoints = 53,
+	ErrorMessages = 54,
+	EventNotifications = 55,
+	EventSessions = 56,
+	LinkedServerLogins = 57,
+	LinkedServers = 58,
+	Logins = 59,
+	MasterKeys = 60,
+	Routes = 61,
+	ServerAuditSpecifications = 62,
+	ServerRoleMembership = 63,
+	ServerRoles = 64,
+	ServerTriggers = 65
+}
+
+export enum ColumnType {
+	text = 0,
+	checkBox = 1,
+	button = 2
+}
+
+export enum ActionOnCellCheckboxCheck {
+	selectRow = 0,
+	customAction = 1
+}
+
+export enum NotebookChangeKind {
+	ContentUpdated = 0,
+	MetadataUpdated = 1,
+	Save = 2,
+	CellExecuted = 3
+}
+
+export type QueryEventType =
+	| 'queryStart'
+	| 'queryStop'
+	| 'executionPlan'
+	| 'visualize';

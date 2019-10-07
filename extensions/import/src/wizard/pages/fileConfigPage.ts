@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 'use strict';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
 import { ImportDataModel } from '../api/models';
@@ -16,20 +16,20 @@ const localize = nls.loadMessageBundle();
 
 export class FileConfigPage extends ImportPage {
 
-	private serverDropdown: sqlops.DropDownComponent;
-	private databaseDropdown: sqlops.DropDownComponent;
-	private fileTextBox: sqlops.InputBoxComponent;
-	private fileButton: sqlops.ButtonComponent;
-	private tableNameTextBox: sqlops.InputBoxComponent;
-	private schemaDropdown: sqlops.DropDownComponent;
-	private form: sqlops.FormContainer;
+	private serverDropdown: azdata.DropDownComponent;
+	private databaseDropdown: azdata.DropDownComponent;
+	private fileTextBox: azdata.InputBoxComponent;
+	private fileButton: azdata.ButtonComponent;
+	private tableNameTextBox: azdata.InputBoxComponent;
+	private schemaDropdown: azdata.DropDownComponent;
+	private form: azdata.FormContainer;
 
-	private databaseLoader: sqlops.LoadingComponent;
-	private schemaLoader: sqlops.LoadingComponent;
+	private databaseLoader: azdata.LoadingComponent;
+	private schemaLoader: azdata.LoadingComponent;
 
 	private tableNames: string[] = [];
 
-	public constructor(instance: FlatFileWizard, wizardPage: sqlops.window.modelviewdialog.WizardPage, model: ImportDataModel, view: sqlops.ModelView, provider: FlatFileProvider) {
+	public constructor(instance: FlatFileWizard, wizardPage: azdata.window.WizardPage, model: ImportDataModel, view: azdata.ModelView, provider: FlatFileProvider) {
 		super(instance, wizardPage, model, view, provider);
 	}
 
@@ -82,7 +82,7 @@ export class FileConfigPage extends ImportPage {
 		});
 	}
 
-	private async createServerDropdown(): Promise<sqlops.FormComponent> {
+	private async createServerDropdown(): Promise<azdata.FormComponent> {
 		this.serverDropdown = this.view.modelBuilder.dropDown().withProperties({
 			required: true
 		}).component();
@@ -102,57 +102,9 @@ export class FileConfigPage extends ImportPage {
 	}
 
 	private async populateServerDropdown(): Promise<boolean> {
-		let cons = await sqlops.connection.getActiveConnections();
-		// This user has no active connections ABORT MISSION
-		if (!cons || cons.length === 0) {
-			return true;
-		}
-
-
-		let count = -1;
-		let idx = -1;
-
-
-		let values = cons.map(c => {
-			// Handle the code to remember what the user's choice was from before
-			count++;
-			if (idx === -1) {
-				if (this.model.server && c.connectionId === this.model.server.connectionId) {
-					idx = count;
-				} else if (this.model.serverId && c.connectionId === this.model.serverId) {
-					idx = count;
-				}
-			}
-
-			let db = c.options.databaseDisplayName;
-			let usr = c.options.user;
-			let srv = c.options.server;
-
-			if (!db) {
-				db = '<default>';
-			}
-
-			if (!usr) {
-				usr = 'default';
-			}
-
-			let finalName = `${srv}, ${db} (${usr})`;
-			return {
-				connection: c,
-				displayName: finalName,
-				name: c.connectionId
-			};
-		});
-
-		if (idx >= 0) {
-			let tmp = values[0];
-			values[0] = values[idx];
-			values[idx] = tmp;
-		} else {
-			delete this.model.server;
-			delete this.model.serverId;
-			delete this.model.database;
-			delete this.model.schema;
+		let values = await this.getServerValues();
+		if (values === undefined) {
+			return false;
 		}
 
 		this.model.server = values[0].connection;
@@ -164,14 +116,14 @@ export class FileConfigPage extends ImportPage {
 		return true;
 	}
 
-	private async createDatabaseDropdown(): Promise<sqlops.FormComponent> {
+	private async createDatabaseDropdown(): Promise<azdata.FormComponent> {
 		this.databaseDropdown = this.view.modelBuilder.dropDown().withProperties({
 			required: true
 		}).component();
 
 		// Handle database changes
 		this.databaseDropdown.onValueChanged(async (db) => {
-			this.model.database = (<sqlops.CategoryValue>this.databaseDropdown.value).name;
+			this.model.database = (<azdata.CategoryValue>this.databaseDropdown.value).name;
 			//this.populateTableNames();
 			this.populateSchemaDropdown();
 		});
@@ -195,29 +147,7 @@ export class FileConfigPage extends ImportPage {
 			return false;
 		}
 
-
-		let idx = -1;
-		let count = -1;
-		let values = (await sqlops.connection.listDatabases(this.model.server.connectionId)).map(db => {
-			count++;
-			if (this.model.database && db === this.model.database) {
-				idx = count;
-			}
-
-			return {
-				displayName: db,
-				name: db
-			};
-		});
-
-		if (idx >= 0) {
-			let tmp = values[0];
-			values[0] = values[idx];
-			values[idx] = tmp;
-		} else {
-			delete this.model.database;
-			delete this.model.schema;
-		}
+		let values = await this.getDatabaseValues();
 
 		this.model.database = values[0].name;
 
@@ -229,7 +159,7 @@ export class FileConfigPage extends ImportPage {
 		return true;
 	}
 
-	private async createFileBrowser(): Promise<sqlops.FormComponent> {
+	private async createFileBrowser(): Promise<azdata.FormComponent> {
 		this.fileTextBox = this.view.modelBuilder.inputBox().withProperties({
 			required: true
 		}).component();
@@ -288,7 +218,7 @@ export class FileConfigPage extends ImportPage {
 		};
 	}
 
-	private async createTableNameBox(): Promise<sqlops.FormComponent> {
+	private async createTableNameBox(): Promise<azdata.FormComponent> {
 		this.tableNameTextBox = this.view.modelBuilder.inputBox().withValidation((name) => {
 			let tableName = name.value;
 
@@ -317,14 +247,14 @@ export class FileConfigPage extends ImportPage {
 	}
 
 
-	private async createSchemaDropdown(): Promise<sqlops.FormComponent> {
+	private async createSchemaDropdown(): Promise<azdata.FormComponent> {
 		this.schemaDropdown = this.view.modelBuilder.dropDown().withProperties({
 			required: true
 		}).component();
 		this.schemaLoader = this.view.modelBuilder.loadingComponent().withItem(this.schemaDropdown).component();
 
 		this.schemaDropdown.onValueChanged(() => {
-			this.model.schema = (<sqlops.CategoryValue>this.schemaDropdown.value).name;
+			this.model.schema = (<azdata.CategoryValue>this.schemaDropdown.value).name;
 		});
 
 
@@ -337,8 +267,8 @@ export class FileConfigPage extends ImportPage {
 
 	private async populateSchemaDropdown(): Promise<boolean> {
 		this.schemaLoader.loading = true;
-		let connectionUri = await sqlops.connection.getUriForConnection(this.model.server.connectionId);
-		let queryProvider = sqlops.dataprotocol.getProvider<sqlops.QueryProvider>(this.model.server.providerName, sqlops.DataProviderType.QueryProvider);
+		let connectionUri = await azdata.connection.getUriForConnection(this.model.server.connectionId);
+		let queryProvider = azdata.dataprotocol.getProvider<azdata.QueryProvider>(this.model.server.providerName, azdata.DataProviderType.QueryProvider);
 
 		let query = `SELECT name FROM sys.schemas`;
 
@@ -377,18 +307,30 @@ export class FileConfigPage extends ImportPage {
 		return true;
 	}
 
+	protected deleteServerValues() {
+		delete this.model.server;
+		delete this.model.serverId;
+		delete this.model.database;
+		delete this.model.schema;
+	}
+
+	protected deleteDatabaseValues() {
+		delete this.model.database;
+		delete this.model.schema;
+	}
+
 	// private async populateTableNames(): Promise<boolean> {
 	// 	this.tableNames = [];
-	// 	let databaseName = (<sqlops.CategoryValue>this.databaseDropdown.value).name;
+	// 	let databaseName = (<azdata.CategoryValue>this.databaseDropdown.value).name;
 	//
 	// 	if (!databaseName || databaseName.length === 0) {
 	// 		this.tableNames = [];
 	// 		return false;
 	// 	}
 	//
-	// 	let connectionUri = await sqlops.connection.getUriForConnection(this.model.server.connectionId);
-	// 	let queryProvider = sqlops.dataprotocol.getProvider<sqlops.QueryProvider>(this.model.server.providerName, sqlops.DataProviderType.QueryProvider);
-	// 	let results: sqlops.SimpleExecuteResult;
+	// 	let connectionUri = await azdata.connection.getUriForConnection(this.model.server.connectionId);
+	// 	let queryProvider = azdata.dataprotocol.getProvider<azdata.QueryProvider>(this.model.server.providerName, azdata.DataProviderType.QueryProvider);
+	// 	let results: azdata.SimpleExecuteResult;
 	//
 	// 	try {
 	// 		//let query = sqlstring.format('USE ?; SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = \'BASE TABLE\'', [databaseName]);
@@ -406,6 +348,6 @@ export class FileConfigPage extends ImportPage {
 }
 
 
-interface ConnectionDropdownValue extends sqlops.CategoryValue {
-	connection: sqlops.connection.Connection;
+interface ConnectionDropdownValue extends azdata.CategoryValue {
+	connection: azdata.connection.Connection;
 }

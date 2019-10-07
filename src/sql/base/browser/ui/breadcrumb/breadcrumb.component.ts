@@ -2,16 +2,16 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import 'vs/css!sql/media/icons/common-icons';
+
 import 'vs/css!./media/breadcrumb';
 
 import { Component, Inject, forwardRef, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { toDisposableSubscription } from 'sql/parts/common/rxjsUtils';
 import { IBreadcrumbService, MenuItem } from './interfaces';
 
 import { IDisposable } from 'vs/base/common/lifecycle';
+import { subscriptionToDisposable } from 'sql/base/browser/lifecycle';
 
 @Component({
 	selector: 'breadcrumb',
@@ -30,7 +30,7 @@ import { IDisposable } from 'vs/base/common/lifecycle';
 				`
 })
 export class BreadcrumbComponent implements OnInit, OnDestroy {
-	private menuItems: MenuItem[] = [];
+	protected menuItems: MenuItem[] = []; // used by angular template
 	private disposables: Array<IDisposable> = new Array();
 
 	constructor(
@@ -40,7 +40,7 @@ export class BreadcrumbComponent implements OnInit, OnDestroy {
 	) { }
 
 	ngOnInit() {
-		this.disposables.push(toDisposableSubscription(this._breadcrumbService.breadcrumbItem.subscribe((item) => this.updateCrumb(item))));
+		this.disposables.push(subscriptionToDisposable(this._breadcrumbService.breadcrumbItem.subscribe((item) => this.updateCrumb(item))));
 	}
 
 	ngOnDestroy() {

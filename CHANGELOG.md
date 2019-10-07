@@ -1,5 +1,213 @@
 # Change Log
 
+## Version 1.12.0
+* Release date: October 2, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Announcing the Query History panel
+* Improved Query Results Grid copy selection support
+* TempDB page added to Server Reports extension
+* PowerShell extension update
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/42?closed=1).
+
+## Version 1.11.0
+* Release date: September 10, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/41?closed=1).
+
+## Version 1.10.0
+* Release date: August 14, 2019
+* Release status: General Availability
+
+## What's new in this version
+* [SandDance](https://github.com/microsoft/SandDance) integration — A new way to interact with data. Download the extension [here](https://docs.microsoft.com/sql/azure-data-studio/sanddance-extension)
+* Notebook improvements
+   * Better loading performance
+   * Ability to right click SQL results grid to save your results as CSV, JSON, etc.
+   * Buttons to add code or text cells in-line
+   * [Other fixes and improvements](https://github.com/microsoft/azuredatastudio/issues?q=is%3Aissue+label%3A%22Area%3A+Notebooks%22+milestone%3A%22August+2019+Release%22+is%3Aclosed)
+* SQL Server Dacpac extension can support Azure Active Directory authentication
+* Updated SQL Server 2019 extension
+* Visual Studio Code May Release Merge 1.37 - this includes changes from [1.36](https://code.visualstudio.com/updates/v1_37) and [1.37](https://code.visualstudio.com/updates/v1_37)
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/39?closed=1).
+
+## Version 1.9.0
+* Release date: July 11, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Release of [SentryOne Plan Explorer Extension](https://www.sentryone.com/products/sentryone-plan-explorer-extension-azure-data-studio)
+* **Schema Compare**
+    * Schema Compare File Support (.SCMP)
+    * Cancel support
+    * [Other fixes and improvements](https://github.com/Microsoft/azuredatastudio/issues?q=is%3Aissue+milestone%3A%22July+2019+Release%22+is%3Aclosed+label%3A%22Area%3A+Schema+Compare%22)
+* **Notebooks**
+    * Plotly Support
+    * Open Notebook from Browser
+    * Python Package Management
+    * Performance & Markdown Enhancements
+    * Improved Keyboard Shortcuts
+    * [Other fixes and improvements](https://github.com/Microsoft/azuredatastudio/issues?q=is%3Aissue+milestone%3A%22July+2019+Release%22+is%3Aclosed+label%3A%22Area%3A+Notebooks%22)
+* **SQL Server Profiler**
+    * Filtering by Database Name
+    * Copy & Paste Support
+    * Save/Load Filter
+* SQL Server 2019 Support
+* New Language Packs Available
+* Visual Studio Code May Release Merge 1.35 - the latest improvements can be found [here](https://code.visualstudio.com/updates/v1_35)
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/35?closed=1).
+
+## Version 1.8.0
+* Release date: June 6, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Initial release of the Database Admin Tool Extensions for Windows *Preview* extension
+* Initial release of the Central Management Servers extension
+* **Schema Compare**
+   * Added Exclude/Include Options
+   * Generate Script opens script after being generated
+   * Removed double scroll bars
+   * Formatting and layout improvements
+   * Complete changes can be found [here](https://github.com/microsoft/azuredatastudio/issues?q=is%3Aissue+milestone%3A%22June+2019+Release%22+label%3A%22Area%3A+Schema+Compare%22+is%3Aclosed)
+* Messages panel moved into results panel - when users ran SQL queries, results and messages were in stacked panels. Now they are in separate tabs in a single panel similar to SSMS.
+* **Notebook**
+   * Users can now choose to use their own Python 3 or Anaconda installs in notebooks
+   * Multiple Stability + fit/finish fixes
+   * View the full list of improvements and fixes [here](https://github.com/microsoft/azuredatastudio/issues?q=is%3Aissue+milestone%3A%22June+2019+Release%22+is%3Aclosed+label%3A%22Area%3A+Notebooks%22)
+* Visual Studio Code May Release Merge 1.34 - the latest improvements can be found [here](https://code.visualstudio.com/updates/v1_34)
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/32?closed=1).
+
+## Version 1.7.0
+* Release date: May 8, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Announcing Schema Compare *Preview* extension
+* Tasks Panel UX improvement
+* Announcing new Welcome page
+* Resolved [bugs and issues](https://github.com/microsoft/azuredatastudio/milestone/31?closed=1).
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues.
+
+## Version 1.6.0
+* Release date: April 18, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Align with latest VS Code editor platform (currently 1.33.1)
+* Resolved [bugs and issues](https://github.com/Microsoft/azuredatastudio/milestone/26?closed=1).
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* yamatoya for `fix the format (#4899)`
+
+## Version 1.5.1
+* Release date: March 18, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Announcing T-SQL Notebooks
+* Announcing PostgreSQL extension
+* Announcing SQL Server Dacpac extension
+* Resolved [bugs and issues](https://github.com/Microsoft/azuredatastudio/milestone/25?closed=1).
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* GeoffYoung for `Fix sqlDropColumn description #4422`
+
+## Version 1.4.5
+* Release date: February 13, 2019
+* Release status: General Availability
+
+## What's new in this version
+* Added **Admin pack for SQL Server** extension pack to make it easier to install SQL Server admin-related extensions. This includes:
+    * [SQL Server Agent](https://docs.microsoft.com/en-us/sql/azure-data-studio/sql-server-agent-extension?view=sql-server-2017)
+    * [SQL Server Profiler](https://docs.microsoft.com/en-us/sql/azure-data-studio/sql-server-profiler-extension?view=sql-server-2017)
+    * [SQL Server Import](https://docs.microsoft.com/en-us/sql/azure-data-studio/sql-server-import-extension?view=sql-server-2017)
+* Added filtering extended event support in Profiler extension
+* Added Save as XML feature that can save T-SQL results as XML
+* Added Data-Tier Application Wizard improvements
+    * Added Generate script button
+    * Added view to give warnings of possible data loss during deployment
+* Updates to the [SQL Server 2019 Preview extension](https://docs.microsoft.com/sql/azure-data-studio/sql-server-2019-extension?view=sql-server-ver15)
+* Results streaming enabled by default for long running queries
+* Resolved [bugs and issues](https://github.com/Microsoft/azuredatastudio/milestone/23?closed=1).
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* AlexFsmn for `Added context menu for DBs in explorer view to backup & restore db. #2277`
+* sadedil for `Missing feature request: Save as XML #3729`
+* gbritton1 for `Removed reference to object explorer #3463`
+
+## Version 1.3.8
+* Release date: January 9, 2019
+* Release status: General Availability
+
+## What's new in this version
+* #13 Feature Request: Azure Active Directory Authentication
+* #1040 Stream initial query results as they become available
+* #3298 Сan't add an azure account.
+* #2387 Support Per-User Installer
+* SQL Server Import updates for DACPAC\BACPAC
+* SQL Server Profiler UI and UX improvements
+* Updates to [SQL Server 2019 extension](https://docs.microsoft.com/sql/azure-data-studio/sql-server-2019-extension?view=sql-server-ver15)
+* **sp_executesql to SQL** and **New Database** extensions
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* Tarig0  for `Add Routine_Type to CreateStoredProc fixes #3257 (#3286)`
+* oltruong  for `typo fix #3025'`
+* Thomas-S-B for `Removed unnecessary IErrorDetectionStrategy #749`
+* Thomas-S-B for `Simplified code #750`
+
+## Version 1.2.4
+* Release date: November 6, 2018
+* Release status: General Availability
+
+## What's new in this version
+* Update to the SQL Server 2019 Preview extension
+* Introducing Paste the Plan extension
+* Introducing High Color queries extension, including SSMS editor theme
+* Fixes in SQL Server Agent, Profiler, and Import extensions
+* Fix .Net Core Socket KeepAlive issue causing dropped inactive connections on macOS
+* Upgrade SQL Tools Service to .Net Core 2.2 Preview 3 (for eventual AAD support)
+* Fix customer reported GitHub issues
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* rdaniels6813  for `Add query plan theme support #3031`
+* Ruturaj123 for `Fixed some typos and grammatical errors #3027`
+* PromoFaux for `Use emoji shortcodes in CONTRIBUTING.md instead of � #3009`
+* ckaczor for `Fix: DATETIMEOFFSET data types should be ISO formatted #714`
+* hi-im-T0dd for `Fixed sync issue with my forked master so this commit is correct #2948`
+* hi-im-T0dd for `Fixed when right clicking and selecting Manage-correct name displays #2794`
+
+## Version 1.1.3
+* Release date: October 18, 2018
+* Release status: General Availability
+
+## What's new in this version
+* Introducing the Azure Resource Explorer to browse Azure SQL Databases
+* Improve Object Explorer and Query Editor connectivity robustness
+* SQL Server 2019 and SQL Agent extension improvements
+
+## Contributions and "thank you"
+We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
+
+* philoushka  for `center the icon #2760`
+* anthonypants for `Typo #2775`
+* kstolte for `Fix Invalid Configuration in Launch.json #2789`
+* kstolte for `Fixing a reference to SQL Ops Studio #2788`
 
 ## Version 1.0.0
 * Release date: September 24, 2018
@@ -7,7 +215,7 @@
 
 ## What's new in this version
 * Announcing the SQL Server 2019 Preview extension.
-  * Support for SQL Server 2019 preview features including big data cluster support.
+  * Support for SQL Server 2019 preview features including Big Data Cluster support.
   * Azure Data Studio Notebooks
   * The Azure Resource Explorer viewlets you browse data-related endpoints for your Azure accounts and create connections to them in Object Explorer. In this release Azure SQL Databases and servers are supported.
   * SQL Server Polybase Create External Table Wizard

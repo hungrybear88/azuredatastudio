@@ -3,15 +3,13 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as adal from 'adal-node';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
+import { promises as fs } from 'fs';
 
 export default class TokenCache implements adal.TokenCache {
-	private static CipherAlgorithm = 'aes256';
+	private static CipherAlgorithm = 'aes-256-cbc';
 	private static CipherAlgorithmIvLength = 16;
 	private static CipherKeyLength = 32;
 	private static FsOptions = { encoding: 'ascii' };
@@ -19,7 +17,7 @@ export default class TokenCache implements adal.TokenCache {
 	private _activeOperation: Thenable<any>;
 
 	constructor(
-		private _credentialProvider: sqlops.CredentialProvider,
+		private _credentialProvider: azdata.CredentialProvider,
 		private _credentialServiceKey: string,
 		private _cacheSerializationPath: string
 	) {
@@ -34,29 +32,45 @@ export default class TokenCache implements adal.TokenCache {
 				.then(cache => self.addToCache(cache, entries))
 				.then(updatedCache => self.writeCache(updatedCache))
 				.then(
-				() => callback(null, false),
-				(err) => callback(err, true)
+					() => callback(null, true),
+					(err) => callback(err, false)
 				);
 		});
 	}
 
-	public clear(): Thenable<void> {
+	/**
+	 * Wrapper to make callback-based add method into a thenable method
+	 * @param entries Entries to add into the cache
+	 * @returns Promise to return the result of adding the tokens to the cache
+	 *     Rejected if an error was sent in the callback
+	 */
+	public addThenable(entries: adal.TokenResponse[]): Thenable<boolean> {
 		let self = this;
+
+		return new Promise<boolean>((resolve, reject) => {
+			self.add(entries, (error: Error, results: boolean) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(results);
+				}
+			});
+		});
+	}
+
+	public async clear(): Promise<void> {
 
 		// 1) Delete encrypted serialization file
 		//    If we got an 'ENOENT' response, the file doesn't exist, which is fine
 		// 3) Delete the encryption key
-		return new Promise<void>((resolve, reject) => {
-			fs.unlink(self._cacheSerializationPath, err => {
-				if (err && err.code !== 'ENOENT') {
-					reject(err);
-				} else {
-					resolve();
-				}
-			});
-		})
-			.then(() => { return self._credentialProvider.deleteCredential(self._credentialServiceKey); })
-			.then(() => { });
+		try {
+			await fs.unlink(this._cacheSerializationPath);
+		} catch (err) {
+			if (err.code !== 'ENOENT') {
+				throw err;
+			}
+		}
+		await this._credentialProvider.deleteCredential(this._credentialServiceKey);
 	}
 
 	public find(query: any, callback: (error: Error, results: any[]) => void): void {
@@ -70,8 +84,8 @@ export default class TokenCache implements adal.TokenCache {
 					);
 				})
 				.then(
-				results => callback(null, results),
-				(err) => callback(err, null)
+					results => callback(null, results),
+					(err) => callback(err, null)
 				);
 		});
 	}
@@ -79,7 +93,7 @@ export default class TokenCache implements adal.TokenCache {
 	/**
 	 * Wrapper to make callback-based find method into a thenable method
 	 * @param query Partial object to use to look up tokens. Ideally should be partial of adal.TokenResponse
-	 * @returns {Thenable<any[]>} Promise to return the matching adal.TokenResponse objects.
+	 * @returns Promise to return the matching adal.TokenResponse objects.
 	 *     Rejected if an error was sent in the callback
 	 */
 	public findThenable(query: any): Thenable<any[]> {
@@ -104,16 +118,16 @@ export default class TokenCache implements adal.TokenCache {
 				.then(cache => self.removeFromCache(cache, entries))
 				.then(updatedCache => self.writeCache(updatedCache))
 				.then(
-				() => callback(null, null),
-				(err) => callback(err, null)
+					() => callback(null, null),
+					(err) => callback(err, null)
 				);
 		});
 	}
 
 	/**
 	 * Wrapper to make callback-based remove method into a thenable method
-	 * @param {TokenResponse[]} entries Array of entries to remove from the token cache
-	 * @returns {Thenable<void>} Promise to remove the given tokens from the token cache
+	 * @param entries Array of entries to remove from the token cache
+	 * @returns Promise to remove the given tokens from the token cache
 	 *     Rejected if an error was sent in the callback
 	 */
 	public removeThenable(entries: adal.TokenResponse[]): Thenable<void> {
@@ -138,7 +152,7 @@ export default class TokenCache implements adal.TokenCache {
 			&& entry1.resource === entry2.resource;
 	}
 
-	private static findByPartial(entry: adal.TokenResponse, query: object): boolean {
+	private static findByPartial(entry: adal.TokenResponse, query: { [key: string]: any }): boolean {
 		for (let key in query) {
 			if (entry[key] === undefined || entry[key] !== query[key]) {
 				return false;
@@ -186,8 +200,8 @@ export default class TokenCache implements adal.TokenCache {
 					if (splitValues.length === 2 && splitValues[0] && splitValues[1]) {
 						try {
 							return <EncryptionParams>{
-								key: new Buffer(splitValues[0], 'hex'),
-								initializationVector: new Buffer(splitValues[1], 'hex')
+								key: Buffer.from(splitValues[0], 'hex'),
+								initializationVector: Buffer.from(splitValues[1], 'hex')
 							};
 						} catch (e) {
 							// Swallow the error and fall through to generate new params
@@ -212,7 +226,7 @@ export default class TokenCache implements adal.TokenCache {
 			});
 	}
 
-	private readCache(): Thenable<adal.TokenResponse[]> {
+	private async readCache(): Promise<adal.TokenResponse[]> {
 		let self = this;
 
 		// NOTE: File system operations are performed synchronously to avoid annoying nested callbacks
@@ -221,24 +235,18 @@ export default class TokenCache implements adal.TokenCache {
 		// 3) Decrypt the file contents
 		// 4) Deserialize and return
 		return this.getOrCreateEncryptionParams()
-			.then(encryptionParams => {
+			.then(async encryptionParams => {
 				try {
-					let cacheCipher = fs.readFileSync(self._cacheSerializationPath, TokenCache.FsOptions);
-
-					let decipher = crypto.createDecipheriv(TokenCache.CipherAlgorithm, encryptionParams.key, encryptionParams.initializationVector);
-					let cacheJson = decipher.update(cacheCipher, 'hex', 'binary');
-					cacheJson += decipher.final('binary');
-
-					// Deserialize the JSON into the array of tokens
-					let cacheObj = <adal.TokenResponse[]>JSON.parse(cacheJson);
-					for (let objIndex in cacheObj) {
-						// Rehydrate Date objects since they will always serialize as a string
-						cacheObj[objIndex].expiresOn = new Date(<string>cacheObj[objIndex].expiresOn);
-					}
-
-					return cacheObj;
+					return self.decryptCache('utf8', encryptionParams);
 				} catch (e) {
-					throw e;
+					try {
+						// try to parse using 'binary' encoding and rewrite cache as UTF8
+						let response = await self.decryptCache('binary', encryptionParams);
+						self.writeCache(response);
+						return response;
+					} catch (e) {
+						throw e;
+					}
 				}
 			})
 			.then(null, err => {
@@ -246,6 +254,22 @@ export default class TokenCache implements adal.TokenCache {
 				console.warn(`Failed to read token cache: ${err}`);
 				return [];
 			});
+	}
+
+	private async decryptCache(encoding: crypto.Utf8AsciiBinaryEncoding, encryptionParams: EncryptionParams): Promise<adal.TokenResponse[]> {
+		let cacheCipher = await fs.readFile(this._cacheSerializationPath, TokenCache.FsOptions);
+		let decipher = crypto.createDecipheriv(TokenCache.CipherAlgorithm, encryptionParams.key, encryptionParams.initializationVector);
+		let cacheJson = decipher.update(cacheCipher.toString(), 'hex', encoding);
+		cacheJson += decipher.final(encoding);
+
+		// Deserialize the JSON into the array of tokens
+		let cacheObj = <adal.TokenResponse[]>JSON.parse(cacheJson);
+		for (const obj of cacheObj) {
+			// Rehydrate Date objects since they will always serialize as a string
+			obj.expiresOn = new Date(<string>obj.expiresOn);
+		}
+
+		return cacheObj;
 	}
 
 	private removeFromCache(cache: adal.TokenResponse[], entries: adal.TokenResponse[]): adal.TokenResponse[] {
@@ -269,15 +293,15 @@ export default class TokenCache implements adal.TokenCache {
 		// 4) Encrypt the JSON
 		// 3) Write to the file
 		return this.getOrCreateEncryptionParams()
-			.then(encryptionParams => {
+			.then(async encryptionParams => {
 				try {
 					let cacheJson = JSON.stringify(cache);
 
 					let cipher = crypto.createCipheriv(TokenCache.CipherAlgorithm, encryptionParams.key, encryptionParams.initializationVector);
-					let cacheCipher = cipher.update(cacheJson, 'binary', 'hex');
+					let cacheCipher = cipher.update(cacheJson, 'utf8', 'hex');
 					cacheCipher += cipher.final('hex');
 
-					fs.writeFileSync(self._cacheSerializationPath, cacheCipher, TokenCache.FsOptions);
+					await fs.writeFile(self._cacheSerializationPath, cacheCipher, TokenCache.FsOptions);
 				} catch (e) {
 					throw e;
 				}

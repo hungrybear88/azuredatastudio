@@ -3,16 +3,13 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as adal from 'adal-node';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import * as request from 'request';
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 import * as url from 'url';
 import {
-	Arguments,
 	AzureAccount,
 	AzureAccountProviderMetadata,
 	AzureAccountSecurityTokenCollection,
@@ -22,24 +19,19 @@ import TokenCache from './tokenCache';
 
 const localize = nls.loadMessageBundle();
 
-export class AzureAccountProvider implements sqlops.AccountProvider {
+export class AzureAccountProvider implements azdata.AccountProvider {
 	// CONSTANTS ///////////////////////////////////////////////////////////
 	private static WorkSchoolAccountType: string = 'work_school';
 	private static MicrosoftAccountType: string = 'microsoft';
 	private static AadCommonTenant: string = 'common';
 
 	// MEMBER VARIABLES ////////////////////////////////////////////////////
-	private _args: Arguments;
 	private _autoOAuthCancelled: boolean;
 	private _commonAuthorityUrl: string;
 	private _inProgressAutoOAuth: InProgressAutoOAuth;
 	private _isInitialized: boolean;
 
 	constructor(private _metadata: AzureAccountProviderMetadata, private _tokenCache: TokenCache) {
-		this._args = {
-			host: this._metadata.settings.host,
-			clientId: this._metadata.settings.clientId
-		};
 		this._autoOAuthCancelled = false;
 		this._inProgressAutoOAuth = null;
 		this._isInitialized = false;
@@ -54,29 +46,29 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 
 	/**
 	 * Clears all tokens that belong to the given account from the token cache
-	 * @param {"data".AccountKey} accountKey Key identifying the account to delete tokens for
-	 * @returns {Thenable<void>} Promise to clear requested tokens from the token cache
+	 * @param accountKey Key identifying the account to delete tokens for
+	 * @returns Promise to clear requested tokens from the token cache
 	 */
-	public clear(accountKey: sqlops.AccountKey): Thenable<void> {
+	public clear(accountKey: azdata.AccountKey): Thenable<void> {
 		return this.doIfInitialized(() => this.clearAccountTokens(accountKey));
 	}
 
 	/**
 	 * Clears the entire token cache. Invoked by command palette action.
-	 * @returns {Thenable<void>} Promise to clear the token cache
+	 * @returns Promise to clear the token cache
 	 */
 	public clearTokenCache(): Thenable<void> {
 		return this._tokenCache.clear();
 	}
 
-	public getSecurityToken(account: AzureAccount): Thenable<AzureAccountSecurityTokenCollection> {
-		return this.doIfInitialized(() => this.getAccessTokens(account));
+	public getSecurityToken(account: AzureAccount, resource: azdata.AzureResource): Thenable<AzureAccountSecurityTokenCollection> {
+		return this.doIfInitialized(() => this.getAccessTokens(account, resource));
 	}
 
-	public initialize(restoredAccounts: sqlops.Account[]): Thenable<sqlops.Account[]> {
+	public initialize(restoredAccounts: azdata.Account[]): Thenable<azdata.Account[]> {
 		let self = this;
 
-		let rehydrationTasks: Thenable<sqlops.Account>[] = [];
+		let rehydrationTasks: Thenable<azdata.Account>[] = [];
 		for (let account of restoredAccounts) {
 			// Purge any invalid accounts
 			if (!account) {
@@ -90,15 +82,15 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 
 			// Attempt to get fresh tokens. If this fails then the account is stale.
 			// NOTE: Based on ADAL implementation, getting tokens should use the refresh token if necessary
-			let task = this.getAccessTokens(account)
+			let task = this.getAccessTokens(account, azdata.AzureResource.ResourceManagement)
 				.then(
-				() => {
-					return account;
-				},
-				() => {
-					account.isStale = true;
-					return account;
-				}
+					() => {
+						return account;
+					},
+					() => {
+						account.isStale = true;
+						return account;
+					}
 				);
 			rehydrationTasks.push(task);
 		}
@@ -111,16 +103,16 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 			});
 	}
 
-	public prompt(): Thenable<AzureAccount> {
+	public prompt(): Thenable<AzureAccount | azdata.PromptFailedResult> {
 		return this.doIfInitialized(() => this.signIn(true));
 	}
 
-	public refresh(account: AzureAccount): Thenable<AzureAccount> {
+	public refresh(account: AzureAccount): Thenable<AzureAccount | azdata.PromptFailedResult> {
 		return this.doIfInitialized(() => this.signIn(false));
 	}
 
 	// PRIVATE METHODS /////////////////////////////////////////////////////
-	private cancelAutoOAuth(): Thenable<void> {
+	private cancelAutoOAuth(): Promise<void> {
 		let self = this;
 
 		if (!this._inProgressAutoOAuth) {
@@ -145,24 +137,29 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 		return Promise.resolve();
 	}
 
-	private clearAccountTokens(accountKey: sqlops.AccountKey): Thenable<void> {
+	private async clearAccountTokens(accountKey: azdata.AccountKey): Promise<void> {
 		// Put together a query to look up any tokens associated with the account key
 		let query = <adal.TokenResponse>{ userId: accountKey.accountId };
 
 		// 1) Look up the tokens associated with the query
 		// 2) Remove them
-		return this._tokenCache.findThenable(query)
-			.then(results => this._tokenCache.removeThenable(results));
+		let results = await this._tokenCache.findThenable(query);
+		this._tokenCache.removeThenable(results);
 	}
 
-	private doIfInitialized<T>(op: () => Thenable<T>): Thenable<T> {
+	private doIfInitialized<T>(op: () => Promise<T>): Promise<T> {
 		return this._isInitialized
 			? op()
 			: Promise.reject(localize('accountProviderNotInitialized', 'Account provider not initialized, cannot perform action'));
 	}
 
-	private getAccessTokens(account: AzureAccount): Thenable<AzureAccountSecurityTokenCollection> {
+	private getAccessTokens(account: AzureAccount, resource: azdata.AzureResource): Promise<AzureAccountSecurityTokenCollection> {
 		let self = this;
+
+		const resourceIdMap = new Map<azdata.AzureResource, string>([
+			[azdata.AzureResource.ResourceManagement, self._metadata.settings.armResource.id],
+			[azdata.AzureResource.Sql, self._metadata.settings.sqlResource.id]
+		]);
 
 		let accessTokenPromises: Thenable<void>[] = [];
 		let tokenCollection: AzureAccountSecurityTokenCollection = {};
@@ -172,7 +169,7 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 				let context = new adal.AuthenticationContext(authorityUrl, null, self._tokenCache);
 
 				context.acquireToken(
-					self._metadata.settings.armResource.id,
+					resourceIdMap.get(resource),
 					tenant.userId,
 					self._metadata.settings.clientId,
 					(error: Error, response: adal.TokenResponse | adal.ErrorResponse) => {
@@ -180,7 +177,7 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 						if (error) {
 							// TODO: We'll assume for now that the account is stale, though that might not be accurate
 							account.isStale = true;
-							sqlops.accounts.accountUpdated(account);
+							azdata.accounts.accountUpdated(account);
 
 							reject(error);
 							return;
@@ -231,7 +228,7 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 		});
 	}
 
-	private getDeviceLoginToken(oAuth: InProgressAutoOAuth, isAddAccount: boolean): Thenable<adal.TokenResponse> {
+	private getDeviceLoginToken(oAuth: InProgressAutoOAuth, isAddAccount: boolean): Thenable<adal.TokenResponse | azdata.PromptFailedResult> {
 		let self = this;
 
 		// 1) Open the auto OAuth dialog
@@ -240,23 +237,24 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 		let title = isAddAccount ?
 			localize('addAccount', 'Add {0} account', self._metadata.displayName) :
 			localize('refreshAccount', 'Refresh {0} account', self._metadata.displayName);
-		return sqlops.accounts.beginAutoOAuthDeviceCode(self._metadata.id, title, oAuth.userCodeInfo.message, oAuth.userCodeInfo.userCode, oAuth.userCodeInfo.verificationUrl)
+		return azdata.accounts.beginAutoOAuthDeviceCode(self._metadata.id, title, oAuth.userCodeInfo.message, oAuth.userCodeInfo.userCode, oAuth.userCodeInfo.verificationUrl)
 			.then(() => {
-				return new Promise<adal.TokenResponse>((resolve, reject) => {
+				return new Promise<adal.TokenResponse | azdata.PromptFailedResult>((resolve, reject) => {
 					let context = oAuth.context;
 					context.acquireTokenWithDeviceCode(self._metadata.settings.signInResourceId, self._metadata.settings.clientId, oAuth.userCodeInfo,
 						(err, response) => {
 							if (err) {
 								if (self._autoOAuthCancelled) {
+									let result: azdata.PromptFailedResult = { canceled: true };
 									// Auto OAuth was cancelled by the user, indicate this with the error we return
-									reject(<sqlops.UserCancelledSignInError>{ userCancelledSignIn: true });
+									resolve(result);
 								} else {
 									// Auto OAuth failed for some other reason
-									sqlops.accounts.endAutoOAuthDeviceCode();
+									azdata.accounts.endAutoOAuthDeviceCode();
 									reject(err);
 								}
 							} else {
-								sqlops.accounts.endAutoOAuthDeviceCode();
+								azdata.accounts.endAutoOAuthDeviceCode();
 								resolve(<adal.TokenResponse>response);
 							}
 
@@ -316,10 +314,10 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 	 * Retrieves a token for the given user ID for the specific tenant ID. If the token can, it
 	 * will be retrieved from the cache as per the ADAL API. AFAIK, the ADAL API will also utilize
 	 * the refresh token if there aren't any unexpired tokens to use.
-	 * @param {string} userId ID of the user to get a token for
-	 * @param {string} tenantId Tenant to get the token for
-	 * @param {string} resourceId ID of the resource the token will be good for
-	 * @returns {Thenable<TokenResponse>} Promise to return a token. Rejected if retrieving the token fails.
+	 * @param userId ID of the user to get a token for
+	 * @param tenantId Tenant to get the token for
+	 * @param resourceId ID of the resource the token will be good for
+	 * @returns Promise to return a token. Rejected if retrieving the token fails.
 	 */
 	private getToken(userId: string, tenantId: string, resourceId: string): Thenable<adal.TokenResponse> {
 		let self = this;
@@ -341,9 +339,9 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 
 	/**
 	 * Performs a web request using the provided bearer token
-	 * @param {TokenResponse} accessToken Bearer token for accessing the provided URI
-	 * @param {string} uri URI to access
-	 * @returns {Thenable<any>} Promise to return the deserialized body of the request. Rejected if error occurred.
+	 * @param accessToken Bearer token for accessing the provided URI
+	 * @param uri URI to access
+	 * @returns Promise to return the deserialized body of the request. Rejected if error occurred.
 	 */
 	private makeWebRequest(accessToken: adal.TokenResponse, uri: string): Thenable<any> {
 		return new Promise<any>((resolve, reject) => {
@@ -358,7 +356,7 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 			};
 
 			// Setup the callback to resolve/reject this promise
-			let callback = (error, response, body: { error: any; value: any; }) => {
+			const callback: request.RequestCallback = (error, response, body: { error: any; value: any; }) => {
 				if (error || body.error) {
 					reject(error || JSON.stringify(body.error));
 				} else {
@@ -371,73 +369,73 @@ export class AzureAccountProvider implements sqlops.AccountProvider {
 		});
 	}
 
-	private signIn(isAddAccount: boolean): Thenable<AzureAccount> {
-		let self = this;
+	private isPromptFailed(value: adal.TokenResponse | azdata.PromptFailedResult): value is azdata.PromptFailedResult {
+		return value && (<azdata.PromptFailedResult>value).canceled;
+	}
 
+	private async signIn(isAddAccount: boolean): Promise<AzureAccount | azdata.PromptFailedResult> {
 		// 1) Get the user code for this login
 		// 2) Get an access token from the device code
 		// 3) Get the list of tenants
 		// 4) Generate the AzureAccount object and return it
 		let tokenResponse: adal.TokenResponse = null;
-		return this.getDeviceLoginUserCode()
-			.then((result: InProgressAutoOAuth) => {
-				self._autoOAuthCancelled = false;
-				self._inProgressAutoOAuth = result;
-				return self.getDeviceLoginToken(self._inProgressAutoOAuth, isAddAccount);
-			})
-			.then((response: adal.TokenResponse) => {
-				tokenResponse = response;
-				self._autoOAuthCancelled = false;
-				self._inProgressAutoOAuth = null;
-				return self.getTenants(tokenResponse.userId, tokenResponse.userId);
-			})
-			.then((tenants: Tenant[]) => {
-				// Figure out where we're getting the identity from
-				let identityProvider = tokenResponse.identityProvider;
-				if (identityProvider) {
-					identityProvider = identityProvider.toLowerCase();
-				}
+		let result: InProgressAutoOAuth = await this.getDeviceLoginUserCode();
+		this._autoOAuthCancelled = false;
+		this._inProgressAutoOAuth = result;
+		let response: adal.TokenResponse | azdata.PromptFailedResult = await this.getDeviceLoginToken(this._inProgressAutoOAuth, isAddAccount);
+		if (this.isPromptFailed(response)) {
+			return response;
+		}
+		tokenResponse = response;
+		this._autoOAuthCancelled = false;
+		this._inProgressAutoOAuth = null;
+		let tenants: Tenant[] = await this.getTenants(tokenResponse.userId, tokenResponse.userId);
+		// Figure out where we're getting the identity from
+		let identityProvider = tokenResponse.identityProvider;
+		if (identityProvider) {
+			identityProvider = identityProvider.toLowerCase();
+		}
 
-				// Determine if this is a microsoft account
-				let msa = identityProvider && (
-					identityProvider.indexOf('live.com') !== -1 ||
-					identityProvider.indexOf('live-int.com') !== -1 ||
-					identityProvider.indexOf('f8cdef31-a31e-4b4a-93e4-5f571e91255a') !== -1 ||
-					identityProvider.indexOf('ea8a4392-515e-481f-879e-6571ff2a8a36') !== -1);
+		// Determine if this is a microsoft account
+		let msa = identityProvider && (
+			identityProvider.indexOf('live.com') !== -1 ||
+			identityProvider.indexOf('live-int.com') !== -1 ||
+			identityProvider.indexOf('f8cdef31-a31e-4b4a-93e4-5f571e91255a') !== -1 ||
+			identityProvider.indexOf('ea8a4392-515e-481f-879e-6571ff2a8a36') !== -1);
 
-				// Calculate the display name for the user
-				let displayName = (tokenResponse.givenName && tokenResponse.familyName)
-					? `${tokenResponse.givenName} ${tokenResponse.familyName}`
-					: tokenResponse.userId;
+		// Calculate the display name for the user
+		let displayName = (tokenResponse.givenName && tokenResponse.familyName)
+			? `${tokenResponse.givenName} ${tokenResponse.familyName}`
+			: tokenResponse.userId;
 
-				// Calculate the home tenant display name to use for the contextual display name
-				let contextualDisplayName = msa
-					? localize('microsoftAccountDisplayName', 'Microsoft Account')
-					: tenants[0].displayName;
+		// Calculate the home tenant display name to use for the contextual display name
+		let contextualDisplayName = msa
+			? localize('microsoftAccountDisplayName', 'Microsoft Account')
+			: tenants[0].displayName;
 
-				// Calculate the account type
-				let accountType = msa
-					? AzureAccountProvider.MicrosoftAccountType
-					: AzureAccountProvider.WorkSchoolAccountType;
+		// Calculate the account type
+		let accountType = msa
+			? AzureAccountProvider.MicrosoftAccountType
+			: AzureAccountProvider.WorkSchoolAccountType;
 
-				return <AzureAccount>{
-					key: {
-						providerId: self._metadata.id,
-						accountId: tokenResponse.userId
-					},
-					name: tokenResponse.userId,
-					displayInfo: {
-						accountType: accountType,
-						contextualDisplayName: contextualDisplayName,
-						displayName: displayName
-					},
-					properties: {
-						isMsAccount: msa,
-						tenants: tenants
-					},
-					isStale: false
-				};
-			});
+		return <AzureAccount>{
+			key: {
+				providerId: this._metadata.id,
+				accountId: tokenResponse.userId
+			},
+			name: tokenResponse.userId,
+			displayInfo: {
+				accountType: accountType,
+				userId: tokenResponse.userId,
+				contextualDisplayName: contextualDisplayName,
+				displayName: displayName
+			},
+			properties: {
+				isMsAccount: msa,
+				tenants: tenants
+			},
+			isStale: false
+		};
 	}
 }
 

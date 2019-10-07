@@ -443,7 +443,7 @@ interface SymbolConstructor {
     /**
       * A reference to the prototype.
       */
-    prototype: Symbol;
+    readonly prototype: Symbol;
 
     /**
       * Returns a new unique Symbol value.
@@ -600,56 +600,6 @@ interface JSON {
 // Modules: es6.map, es6.set, es6.weak-map, and es6.weak-set
 // #############################################################################################
 
-interface Map<K, V> {
-    clear(): void;
-    delete(key: K): boolean;
-    forEach(callbackfn: (value: V, index: K, map: Map<K, V>) => void, thisArg?: any): void;
-    get(key: K): V;
-    has(key: K): boolean;
-    set(key: K, value?: V): Map<K, V>;
-    size: number;
-}
-
-interface MapConstructor {
-    new <K, V>(): Map<K, V>;
-    new <K, V>(iterable: Iterable<[K, V]>): Map<K, V>;
-    prototype: Map<any, any>;
-}
-
-declare var Map: MapConstructor;
-
-interface Set<T> {
-    add(value: T): Set<T>;
-    clear(): void;
-    delete(value: T): boolean;
-    forEach(callbackfn: (value: T, index: T, set: Set<T>) => void, thisArg?: any): void;
-    has(value: T): boolean;
-    size: number;
-}
-
-interface SetConstructor {
-    new <T>(): Set<T>;
-    new <T>(iterable: Iterable<T>): Set<T>;
-    prototype: Set<any>;
-}
-
-declare var Set: SetConstructor;
-
-interface WeakMap<K, V> {
-    delete(key: K): boolean;
-    get(key: K): V;
-    has(key: K): boolean;
-    set(key: K, value?: V): WeakMap<K, V>;
-}
-
-interface WeakMapConstructor {
-    new <K, V>(): WeakMap<K, V>;
-    new <K, V>(iterable: Iterable<[K, V]>): WeakMap<K, V>;
-    prototype: WeakMap<any, any>;
-}
-
-declare var WeakMap: WeakMapConstructor;
-
 interface WeakSet<T> {
     add(value: T): WeakSet<T>;
     delete(value: T): boolean;
@@ -657,9 +607,9 @@ interface WeakSet<T> {
 }
 
 interface WeakSetConstructor {
-    new <T>(): WeakSet<T>;
-    new <T>(iterable: Iterable<T>): WeakSet<T>;
-    prototype: WeakSet<any>;
+    new <T extends object>(): WeakSet<T>;
+    new <T extends object>(iterable: Iterable<T>): WeakSet<T>;
+    readonly prototype: WeakSet<any>;
 }
 
 declare var WeakSet: WeakSetConstructor;
@@ -668,11 +618,6 @@ declare var WeakSet: WeakSetConstructor;
 // ECMAScript 6: Iterators
 // Modules: es6.string.iterator, es6.array.iterator, es6.map, es6.set, web.dom.iterable
 // #############################################################################################
-
-interface IteratorResult<T> {
-    done: boolean;
-    value?: T;
-}
 
 interface Iterator<T> {
     next(value?: any): IteratorResult<T>;
@@ -713,20 +658,6 @@ interface Array<T> {
     values(): IterableIterator<T>;
 }
 
-interface Map<K, V> {
-    entries(): IterableIterator<[K, V]>;
-    keys(): IterableIterator<K>;
-    values(): IterableIterator<V>;
-    [Symbol.iterator](): IterableIterator<[K, V]>;
-}
-
-interface Set<T> {
-    entries(): IterableIterator<[T, T]>;
-    keys(): IterableIterator<T>;
-    values(): IterableIterator<T>;
-    [Symbol.iterator](): IterableIterator<T>;
-}
-
 interface NodeList {
     [Symbol.iterator](): IterableIterator<Node>;
 }
@@ -760,93 +691,93 @@ interface PromiseLike<T> {
 /**
  * Represents the completion of an asynchronous operation
  */
-interface Promise<T> {
-    /**
-    * Attaches callbacks for the resolution and/or rejection of the Promise.
-    * @param onfulfilled The callback to execute when the Promise is resolved.
-    * @param onrejected The callback to execute when the Promise is rejected.
-    * @returns A Promise for the completion of which ever callback is executed.
-    */
-    then<TResult>(onfulfilled?: (value: T) => TResult | PromiseLike<TResult>, onrejected?: (reason: any) => TResult | PromiseLike<TResult>): Promise<TResult>;
-    then<TResult>(onfulfilled?: (value: T) => TResult | PromiseLike<TResult>, onrejected?: (reason: any) => void): Promise<TResult>;
+// interface Promise<T> {
+//     /**
+//     * Attaches callbacks for the resolution and/or rejection of the Promise.
+//     * @param onfulfilled The callback to execute when the Promise is resolved.
+//     * @param onrejected The callback to execute when the Promise is rejected.
+//     * @returns A Promise for the completion of which ever callback is executed.
+//     */
+//     then<TResult>(onfulfilled?: (value: T) => TResult | PromiseLike<TResult>, onrejected?: (reason: any) => TResult | PromiseLike<TResult>): Promise<TResult>;
+//     then<TResult>(onfulfilled?: (value: T) => TResult | PromiseLike<TResult>, onrejected?: (reason: any) => void): Promise<TResult>;
 
-    /**
-     * Attaches a callback for only the rejection of the Promise.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of the callback.
-     */
-    catch(onrejected?: (reason: any) => T | PromiseLike<T>): Promise<T>;
-    catch(onrejected?: (reason: any) => void): Promise<T>;
-}
+//     /**
+//      * Attaches a callback for only the rejection of the Promise.
+//      * @param onrejected The callback to execute when the Promise is rejected.
+//      * @returns A Promise for the completion of the callback.
+//      */
+//     catch(onrejected?: (reason: any) => T | PromiseLike<T>): Promise<T>;
+//     catch(onrejected?: (reason: any) => void): Promise<T>;
+// }
 
-interface PromiseConstructor {
-    /**
-      * A reference to the prototype.
-      */
-    prototype: Promise<any>;
+// interface PromiseConstructor {
+//     /**
+//       * A reference to the prototype.
+//       */
+//     prototype: Promise<any>;
 
-    /**
-     * Creates a new Promise.
-     * @param executor A callback used to initialize the promise. This callback is passed two arguments:
-     * a resolve callback used resolve the promise with a value or the result of another promise,
-     * and a reject callback used to reject the promise with a provided reason or error.
-     */
-    new <T>(executor: (resolve: (value?: T | PromiseLike<T>) => void, reject: (reason?: any) => void) => void): Promise<T>;
+//     /**
+//      * Creates a new Promise.
+//      * @param executor A callback used to initialize the promise. This callback is passed two arguments:
+//      * a resolve callback used resolve the promise with a value or the result of another promise,
+//      * and a reject callback used to reject the promise with a provided reason or error.
+//      */
+//     new <T>(executor: (resolve: (value?: T | PromiseLike<T>) => void, reject: (reason?: any) => void) => void): Promise<T>;
 
-    /**
-     * Creates a Promise that is resolved with an array of results when all of the provided Promises
-     * resolve, or rejected when any Promise is rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    all<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>, T10 | PromiseLike<T10>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]>;
-    all<T1, T2, T3, T4, T5, T6, T7, T8, T9>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9]>;
-    all<T1, T2, T3, T4, T5, T6, T7, T8>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8]>;
-    all<T1, T2, T3, T4, T5, T6, T7>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>]): Promise<[T1, T2, T3, T4, T5, T6, T7]>;
-    all<T1, T2, T3, T4, T5, T6>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>]): Promise<[T1, T2, T3, T4, T5, T6]>;
-    all<T1, T2, T3, T4, T5>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>]): Promise<[T1, T2, T3, T4, T5]>;
-    all<T1, T2, T3, T4>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>]): Promise<[T1, T2, T3, T4]>;
-    all<T1, T2, T3>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>]): Promise<[T1, T2, T3]>;
-    all<T1, T2>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>]): Promise<[T1, T2]>;
-    all<TAll>(values: Iterable<TAll | PromiseLike<TAll>>): Promise<TAll[]>;
+//     /**
+//      * Creates a Promise that is resolved with an array of results when all of the provided Promises
+//      * resolve, or rejected when any Promise is rejected.
+//      * @param values An array of Promises.
+//      * @returns A new Promise.
+//      */
+//     all<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>, T10 | PromiseLike<T10>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]>;
+//     all<T1, T2, T3, T4, T5, T6, T7, T8, T9>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9]>;
+//     all<T1, T2, T3, T4, T5, T6, T7, T8>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8]>;
+//     all<T1, T2, T3, T4, T5, T6, T7>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>]): Promise<[T1, T2, T3, T4, T5, T6, T7]>;
+//     all<T1, T2, T3, T4, T5, T6>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>]): Promise<[T1, T2, T3, T4, T5, T6]>;
+//     all<T1, T2, T3, T4, T5>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>]): Promise<[T1, T2, T3, T4, T5]>;
+//     all<T1, T2, T3, T4>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>]): Promise<[T1, T2, T3, T4]>;
+//     all<T1, T2, T3>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>]): Promise<[T1, T2, T3]>;
+//     all<T1, T2>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>]): Promise<[T1, T2]>;
+//     all<TAll>(values: Iterable<TAll | PromiseLike<TAll>>): Promise<TAll[]>;
 
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T>(values: Iterable<T | PromiseLike<T>>): Promise<T>;
+//     /**
+//      * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
+//      * or rejected.
+//      * @param values An array of Promises.
+//      * @returns A new Promise.
+//      */
+//     race<T>(values: Iterable<T | PromiseLike<T>>): Promise<T>;
 
-    /**
-     * Creates a new rejected promise for the provided reason.
-     * @param reason The reason the promise was rejected.
-     * @returns A new rejected Promise.
-     */
-    reject(reason: any): Promise<void>;
+//     /**
+//      * Creates a new rejected promise for the provided reason.
+//      * @param reason The reason the promise was rejected.
+//      * @returns A new rejected Promise.
+//      */
+//     reject(reason: any): Promise<void>;
 
-    /**
-     * Creates a new rejected promise for the provided reason.
-     * @param reason The reason the promise was rejected.
-     * @returns A new rejected Promise.
-     */
-    reject<T>(reason: any): Promise<T>;
+//     /**
+//      * Creates a new rejected promise for the provided reason.
+//      * @param reason The reason the promise was rejected.
+//      * @returns A new rejected Promise.
+//      */
+//     reject<T>(reason: any): Promise<T>;
 
-    /**
-      * Creates a new resolved promise for the provided value.
-      * @param value A promise.
-      * @returns A promise whose internal state matches the provided promise.
-      */
-    resolve<T>(value: T | PromiseLike<T>): Promise<T>;
+//     /**
+//       * Creates a new resolved promise for the provided value.
+//       * @param value A promise.
+//       * @returns A promise whose internal state matches the provided promise.
+//       */
+//     resolve<T>(value: T | PromiseLike<T>): Promise<T>;
 
-    /**
-     * Creates a new resolved promise .
-     * @returns A resolved promise.
-     */
-    resolve(): Promise<void>;
-}
+//     /**
+//      * Creates a new resolved promise .
+//      * @returns A resolved promise.
+//      */
+//     resolve(): Promise<void>;
+// }
 
-declare var Promise: PromiseConstructor;
+// declare var Promise: PromiseConstructor;
 
 // #############################################################################################
 // ECMAScript 6: Reflect
@@ -895,14 +826,6 @@ interface ObjectConstructor {
 
 interface RegExpConstructor {
     escape(str: string): string;
-}
-
-interface Map<K, V> {
-    toJSON(): any;
-}
-
-interface Set<T> {
-    toJSON(): any;
 }
 
 // #############################################################################################
@@ -1458,7 +1381,7 @@ declare namespace core {
     var Set: SetConstructor;
     var WeakMap: WeakMapConstructor;
     var WeakSet: WeakSetConstructor;
-    var Promise: PromiseConstructor;
+    // var Promise: PromiseConstructor;
     var Symbol: SymbolConstructor;
     var Dict: DictConstructor;
     var global: any;
@@ -1588,10 +1511,10 @@ declare module "core-js/fn/map" {
     var Map: typeof core.Map;
     export = Map;
 }
-declare module "core-js/fn/promise" {
-    var Promise: typeof core.Promise;
-    export = Promise;
-}
+// declare module "core-js/fn/promise" {
+//     var Promise: typeof core.Promise;
+//     export = Promise;
+// }
 declare module "core-js/fn/set" {
     var Set: typeof core.Set;
     export = Set;
@@ -2193,10 +2116,10 @@ declare module "core-js/es6/object" {
     var Object: typeof core.Object;
     export = Object;
 }
-declare module "core-js/es6/promise" {
-    var Promise: typeof core.Promise;
-    export = Promise;
-}
+// declare module "core-js/es6/promise" {
+//     var Promise: typeof core.Promise;
+//     export = Promise;
+// }
 declare module "core-js/es6/reflect" {
     var Reflect: typeof core.Reflect;
     export = Reflect;
@@ -2368,10 +2291,10 @@ declare module "core-js/library/fn/map" {
     var Map: typeof core.Map;
     export = Map;
 }
-declare module "core-js/library/fn/promise" {
-    var Promise: typeof core.Promise;
-    export = Promise;
-}
+// declare module "core-js/library/fn/promise" {
+//     var Promise: typeof core.Promise;
+//     export = Promise;
+// }
 declare module "core-js/library/fn/set" {
     var Set: typeof core.Set;
     export = Set;
@@ -2964,18 +2887,18 @@ declare module "core-js/library/es6/math" {
     var Math: typeof core.Math;
     export = Math;
 }
-declare module "core-js/library/es6/number" {
-    var Number: typeof core.Number;
-    export = Number;
-}
+// declare module "core-js/library/es6/number" {
+//     var Number: typeof core.Number;
+//     export = Number;
+// }
 declare module "core-js/library/es6/object" {
     var Object: typeof core.Object;
     export = Object;
 }
-declare module "core-js/library/es6/promise" {
-    var Promise: typeof core.Promise;
-    export = Promise;
-}
+// declare module "core-js/library/es6/promise" {
+//     var Promise: typeof core.Promise;
+//     export = Promise;
+// }
 declare module "core-js/library/es6/reflect" {
     var Reflect: typeof core.Reflect;
     export = Reflect;

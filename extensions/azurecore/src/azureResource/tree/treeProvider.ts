@@ -6,26 +6,50 @@
 'use strict';
 
 import { TreeDataProvider, EventEmitter, Event, TreeItem } from 'vscode';
-import { DidChangeAccountsParams } from 'sqlops';
-import { TreeNode } from '../../treeNodes';
-import { setInterval, clearInterval } from 'timers';
+import * as azdata from 'azdata';
+import { AppContext } from '../../appContext';
 import * as nls from 'vscode-nls';
 const localize = nls.loadMessageBundle();
 
-import { AzureResourceServicePool } from '../servicePool';
+import { TreeNode } from '../treeNode';
 import { AzureResourceAccountTreeNode } from './accountTreeNode';
 import { AzureResourceAccountNotSignedInTreeNode } from './accountNotSignedInTreeNode';
-import { AzureResourceMessageTreeNode } from './messageTreeNode';
-import { AzureResourceContainerTreeNodeBase, AzureResourceTreeNodeBase } from './baseTreeNodes';
-import { AzureResourceErrorMessageUtil } from '../utils';
+import { AzureResourceMessageTreeNode } from '../messageTreeNode';
+import { AzureResourceContainerTreeNodeBase } from './baseTreeNodes';
+import { AzureResourceErrorMessageUtil, equals } from '../utils';
+import { IAzureResourceTreeChangeHandler } from './treeChangeHandler';
+import { IAzureResourceAccountService } from '../../azureResource/interfaces';
+import { AzureResourceServiceNames } from '../constants';
 
-export interface IAzureResourceTreeChangeHandler {
-	notifyNodeChanged(node: TreeNode): void;
-}
 
 export class AzureResourceTreeProvider implements TreeDataProvider<TreeNode>, IAzureResourceTreeChangeHandler {
-	public constructor() {
-		AzureResourceServicePool.getInstance().accountService.onDidChangeAccounts((e: DidChangeAccountsParams) => { this._onDidChangeTreeData.fire(undefined); });
+	public isSystemInitialized: boolean = false;
+
+	private accountService: IAzureResourceAccountService;
+	private accounts: azdata.Account[];
+	private _onDidChangeTreeData = new EventEmitter<TreeNode>();
+	private loadingAccountsPromise: Promise<void>;
+
+	public constructor(public readonly appContext: AppContext) {
+		if (appContext) {
+			this.hookAccountService(appContext);
+		}
+	}
+
+	private hookAccountService(appContext: AppContext): void {
+		this.accountService = appContext.getService<IAzureResourceAccountService>(AzureResourceServiceNames.accountService);
+		if (this.accountService) {
+			this.accountService.onDidChangeAccounts((e: azdata.DidChangeAccountsParams) => {
+				// the onDidChangeAccounts event will trigger in many cases where the accounts didn't actually change
+				// the notifyNodeChanged event triggers a refresh which triggers a getChildren which can trigger this callback
+				// this below check short-circuits the infinite callback loop
+				this.setSystemInitialized();
+				if (!equals(e.accounts, this.accounts)) {
+					this.accounts = e.accounts;
+					this.notifyNodeChanged(undefined);
+				}
+			});
+		}
 	}
 
 	public async getChildren(element?: TreeNode): Promise<TreeNode[]> {
@@ -34,39 +58,38 @@ export class AzureResourceTreeProvider implements TreeDataProvider<TreeNode>, IA
 		}
 
 		if (!this.isSystemInitialized) {
-			this._loadingTimer = setInterval(async () => {
-				try {
-					// Call sqlops.accounts.getAllAccounts() to determine whether the system has been initialized.
-					await AzureResourceServicePool.getInstance().accountService.getAccounts();
-
-					// System has been initialized
-					this.isSystemInitialized = true;
-
-					if (this._loadingTimer) {
-						clearInterval(this._loadingTimer);
-					}
-
-					this._onDidChangeTreeData.fire(undefined);
-				} catch (error) {
-					// System not initialized yet
-					this.isSystemInitialized = false;
-				}
-			}, AzureResourceTreeProvider.LoadingTimerInterval);
-
-			return [AzureResourceMessageTreeNode.create(AzureResourceTreeProvider.Loading, undefined)];
+			if (!this.loadingAccountsPromise) {
+				this.loadingAccountsPromise = this.loadAccounts();
+			}
+			return [AzureResourceMessageTreeNode.create(localize('azure.resource.tree.treeProvider.loadingLabel', 'Loading ...'), undefined)];
 		}
 
 		try {
-			const accounts = await AzureResourceServicePool.getInstance().accountService.getAccounts();
-
-			if (accounts && accounts.length > 0) {
-				return accounts.map((account) => new AzureResourceAccountTreeNode(account, this));
+			if (this.accounts && this.accounts.length > 0) {
+				return this.accounts.map((account) => new AzureResourceAccountTreeNode(account, this.appContext, this));
 			} else {
 				return [new AzureResourceAccountNotSignedInTreeNode()];
 			}
 		} catch (error) {
 			return [AzureResourceMessageTreeNode.create(AzureResourceErrorMessageUtil.getErrorMessage(error), undefined)];
 		}
+	}
+
+	private async loadAccounts(): Promise<void> {
+		try {
+			this.accounts = await this.appContext.getService<IAzureResourceAccountService>(AzureResourceServiceNames.accountService).getAccounts();
+			// System has been initialized
+			this.setSystemInitialized();
+			this._onDidChangeTreeData.fire(undefined);
+		} catch (err) {
+			// Skip for now, we can assume that the accounts changed event will eventually notify instead
+			this.isSystemInitialized = false;
+		}
+	}
+
+	private setSystemInitialized(): void {
+		this.isSystemInitialized = true;
+		this.loadingAccountsPromise = undefined;
 	}
 
 	public get onDidChangeTreeData(): Event<TreeNode> {
@@ -90,12 +113,4 @@ export class AzureResourceTreeProvider implements TreeDataProvider<TreeNode>, IA
 	public getTreeItem(element: TreeNode): TreeItem | Thenable<TreeItem> {
 		return element.getTreeItem();
 	}
-
-	public isSystemInitialized: boolean = false;
-
-	private _loadingTimer: NodeJS.Timer = undefined;
-	private _onDidChangeTreeData = new EventEmitter<TreeNode>();
-
-	private static readonly Loading = localize('azureResource.tree.treeProvider.loading', 'Loading ...');
-	private static readonly LoadingTimerInterval = 5000;
 }

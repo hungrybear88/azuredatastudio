@@ -6,20 +6,12 @@
 /*eslint-env mocha*/
 /*global define,run*/
 
-var assert = require('assert');
-var path = require('path');
-var glob = require('glob');
-var istanbul = require('istanbul');
-var i_remap = require('remap-istanbul/lib/remap');
-var jsdom = require('jsdom-no-contextify');
-var minimatch = require('minimatch');
-var fs = require('fs');
-var vm = require('vm');
-// {{SQL CARBON EDIT}}
-var TEST_GLOB = '**/*test*/**/*.test.js';
-
-// {{SQL CARBON EDIT}}
-var SQL_TEST_GLOB = '**/sqltest/**/*.test.js';
+const assert = require('assert');
+const path = require('path');
+const glob = require('glob');
+const jsdom = require('jsdom-no-contextify');
+const TEST_GLOB = '**/test/**/*.test.js|**/sqltest/**/*.test.js';
+const coverage = require('./coverage');
 
 var optimist = require('optimist')
 	.usage('Run the Code tests. All mocha options apply.')
@@ -27,7 +19,6 @@ var optimist = require('optimist')
 	.describe('run', 'Run a single file').string('run')
 	.describe('coverage', 'Generate a coverage report').boolean('coverage')
 	.describe('only-monaco-editor', 'Run only monaco editor tests').boolean('only-monaco-editor')
-	.describe('forceLoad', 'Force loading').boolean('forceLoad')
 	.describe('browser', 'Run tests in a browser').boolean('browser')
 	.alias('h', 'help').boolean('h')
 	.describe('h', 'Show help');
@@ -48,17 +39,18 @@ function main() {
 		console.error(e.stack || e);
 	});
 
-  // {{SQL CARBON EDIT}}
+	// {{SQL CARBON EDIT}}
 	var loaderConfig = {
 		nodeRequire: require,
 		nodeMain: __filename,
 		baseUrl: path.join(path.dirname(__dirname), 'src'),
 		paths: {
-			'vs': `../${ out }/vs`,
-			'sqltest': `../${ out }/sqltest`,
-			'sql': `../${ out }/sql`,
-			'lib': `../${ out }/lib`,
-			'bootstrap': `../${ out }/bootstrap`
+			'vs/css': '../test/css.mock',
+			'vs': `../${out}/vs`,
+			'sqltest': `../${out}/sqltest`,
+			'sql': `../${out}/sql`,
+			'lib': `../${out}/lib`,
+			'bootstrap-fork': `../${out}/bootstrap-fork`
 		},
 		catchError: true,
 		// {{SQL CARBON EDIT}}
@@ -70,7 +62,7 @@ function main() {
 			'@angular/platform-browser-dynamic',
 			'@angular/router',
 			'angular2-grid',
-			'ng2-charts/ng2-charts',
+			'ng2-charts',
 			'rxjs/add/observable/of',
 			'rxjs/Observable',
 			'rxjs/Subject',
@@ -79,109 +71,13 @@ function main() {
 	};
 
 	if (argv.coverage) {
-		var instrumenter = new istanbul.Instrumenter();
-
-		var seenSources = {};
-
-		loaderConfig.nodeInstrumenter = function (contents, source) {
-			seenSources[source] = true;
-
-      // {{SQL CARBON EDIT}}
-			if (minimatch(source, SQL_TEST_GLOB)) {
-				return contents;
-			}
-
-			return instrumenter.instrumentSync(contents, source);
-		};
+		coverage.initialize(loaderConfig);
 
 		process.on('exit', function (code) {
 			if (code !== 0) {
 				return;
 			}
-
-			if (argv.forceLoad) {
-        // {{SQL CARBON EDIT}}
-				var allFiles = glob.sync(out + '/sqltest/**/*.js');
-				allFiles = allFiles.map(function(source) {
-					return path.join(__dirname, '..', source);
-				});
-				allFiles = allFiles.filter(function(source) {
-					if (seenSources[source]) {
-						return false;
-					}
-					if (minimatch(source, TEST_GLOB)) {
-						return false;
-					}
-					if (/fixtures/.test(source)) {
-						return false;
-					}
-					return true;
-				});
-				allFiles.forEach(function(source, index) {
-					var contents = fs.readFileSync(source).toString();
-					contents = instrumenter.instrumentSync(contents, source);
-					var stopAt = contents.indexOf('}\n__cov');
-					stopAt = contents.indexOf('}\n__cov', stopAt + 1);
-
-					var str = '(function() {' + contents.substr(0, stopAt + 1) + '});';
-					var r = vm.runInThisContext(str, source);
-					r.call(global);
-				});
-			}
-
-			let remapIgnores = /\b((winjs\.base)|(marked)|(raw\.marked)|(nls)|(css))\.js$/;
-
-			var remappedCoverage = i_remap(global.__coverage__, { exclude: remapIgnores }).getFinalCoverage();
-
-			// The remapped coverage comes out with broken paths
-			var toUpperDriveLetter = function(str) {
-				if (/^[a-z]:/.test(str)) {
-					return str.charAt(0).toUpperCase() + str.substr(1);
-				}
-				return str;
-			};
-			var toLowerDriveLetter = function(str) {
-				if (/^[A-Z]:/.test(str)) {
-					return str.charAt(0).toLowerCase() + str.substr(1);
-				}
-				return str;
-			};
-
-			var REPO_PATH = toUpperDriveLetter(path.join(__dirname, '..'));
-			var fixPath = function(brokenPath) {
-				var startIndex = brokenPath.indexOf(REPO_PATH);
-				if (startIndex === -1) {
-					return toLowerDriveLetter(brokenPath);
-				}
-				return toLowerDriveLetter(brokenPath.substr(startIndex));
-			};
-
-			var finalCoverage = {};
-			for (var entryKey in remappedCoverage) {
-				var entry = remappedCoverage[entryKey];
-				entry.path = fixPath(entry.path);
-        // {{SQL CARBON EDIT}}
-				if (!entry.path.includes('\\vs\\') && !entry.path.includes('/vs/')) {
-					finalCoverage[fixPath(entryKey)] = entry;
-				}
-			}
-
-			var collector = new istanbul.Collector();
-			collector.add(finalCoverage);
-
-			var coveragePath = path.join(path.dirname(__dirname), '.build', 'coverage');
-			var reportTypes = [];
-			if (argv.run || argv.runGlob) {
-				// single file running
-				coveragePath += '-single';
-				reportTypes = ['lcovonly'];
-			} else {
-        // {{SQL CARBON EDIT}}
-				reportTypes = ['json', 'lcov', 'html', 'cobertura'];
-			}
-			var reporter = new istanbul.Reporter(null, coveragePath);
-			reporter.addAll(reportTypes);
-			reporter.write(collector, true, function () {});
+			coverage.createReport(argv.run || argv.runGlob);
 		});
 	}
 
@@ -196,7 +92,7 @@ function main() {
 	global.Node = global.window.Node;
 	global.navigator = global.window.navigator;
 	global.XMLHttpRequest = global.window.XMLHttpRequest;
-  // {{SQL CARBON EDIT}}
+	// {{SQL CARBON EDIT}}
 	global.Event = global.window.Event;
 
 	require('reflect-metadata');
@@ -229,19 +125,21 @@ function main() {
 		};
 	} else if (argv.run) {
 		var tests = (typeof argv.run === 'string') ? [argv.run] : argv.run;
-		var modulesToLoad = tests.map(function(test) {
-			return path.relative(src, path.resolve(test)).replace(/(\.js)|(\.d\.ts)|(\.js\.map)$/, '');
+		var modulesToLoad = tests.map(function (test) {
+			test = test.replace(/^src/, 'out');
+			test = test.replace(/\.ts$/, '.js');
+			return path.relative(src, path.resolve(test)).replace(/(\.js)|(\.js\.map)$/, '').replace(/\\/g, '/');
 		});
 		loadFunc = cb => {
 			define(modulesToLoad, () => cb(null), cb);
 		};
 	} else if (argv['only-monaco-editor']) {
-		loadFunc = function(cb) {
+		loadFunc = function (cb) {
 			glob(TEST_GLOB, { cwd: src }, function (err, files) {
 				var modulesToLoad = files.map(function (file) {
 					return file.replace(/\.js$/, '');
 				});
-				modulesToLoad = modulesToLoad.filter(function(module) {
+				modulesToLoad = modulesToLoad.filter(function (module) {
 					if (/^vs\/workbench\//.test(module)) {
 						return false;
 					}
@@ -258,7 +156,7 @@ function main() {
 			});
 		};
 	} else {
-		loadFunc = function(cb) {
+		loadFunc = function (cb) {
 			glob(TEST_GLOB, { cwd: src }, function (err, files) {
 				var modulesToLoad = files.map(function (file) {
 					return file.replace(/\.js$/, '');
@@ -268,7 +166,7 @@ function main() {
 		};
 	}
 
-	loadFunc(function(err) {
+	loadFunc(function (err) {
 		if (err) {
 			console.error(err);
 			return process.exit(1);
@@ -301,14 +199,14 @@ function main() {
 				}
 			});
 		});
-    // {{SQL CARBON EDIT}}
+	// {{SQL CARBON EDIT}}
 		*/
 
 		// replace the default unexpected error handler to be useful during tests
-		loader(['vs/base/common/errors'], function(errors) {
+		loader(['vs/base/common/errors'], function (errors) {
 			errors.setUnexpectedErrorHandler(function (err) {
 				let stack = (err && err.stack) || (new Error().stack);
-        // {{SQL CARBON EDIT}}
+				// {{SQL CARBON EDIT}}
 				//unexpectedErrors.push((err && err.message ? err.message : err) + '\n' + stack);
 			});
 

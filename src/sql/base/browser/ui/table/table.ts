@@ -4,69 +4,53 @@
  *--------------------------------------------------------------------------------------------*/
 
 import 'vs/css!./media/table';
-import { TableDataView } from './tableDataView';
+import 'vs/css!./media/slick.grid';
+import 'vs/css!./media/slickColorTheme';
+import 'vs/css!./media/slickGrid';
 
-import { IThemable } from 'vs/platform/theme/common/styler';
-import { IListStyles } from 'vs/base/browser/ui/list/listWidget';
+import { TableDataView } from './tableDataView';
+import { IDisposableDataProvider, ITableSorter, ITableMouseEvent, ITableConfiguration, ITableStyles } from 'sql/base/browser/ui/table/interfaces';
+
 import * as DOM from 'vs/base/browser/dom';
-import { Color } from 'vs/base/common/color';
 import { mixin } from 'vs/base/common/objects';
-import { IDisposable, dispose } from 'vs/base/common/lifecycle';
+import { IDisposable } from 'vs/base/common/lifecycle';
 import { Orientation } from 'vs/base/browser/ui/splitview/splitview';
 import { Widget } from 'vs/base/browser/ui/widget';
 import { isArray, isBoolean } from 'vs/base/common/types';
 import { Event, Emitter } from 'vs/base/common/event';
 import { range } from 'vs/base/common/arrays';
 
-export interface ITableMouseEvent {
-	anchor: HTMLElement | { x: number, y: number };
-	cell?: { row: number, cell: number };
-}
-
-export interface ITableStyles extends IListStyles {
-	tableHeaderBackground?: Color;
-	tableHeaderForeground?: Color;
-}
-
 function getDefaultOptions<T>(): Slick.GridOptions<T> {
 	return <Slick.GridOptions<T>>{
 		syncColumnCellResize: true,
-		enableColumnReorder: false
+		enableColumnReorder: false,
+		emulatePagingWhenScrolling: false
 	};
 }
 
-export interface ITableSorter<T> {
-	sort(args: Slick.OnSortEventArgs<T>);
-}
-
-export interface ITableConfiguration<T> {
-	dataProvider?: Slick.DataProvider<T> | Array<T>;
-	columns?: Slick.Column<T>[];
-	sorter?: ITableSorter<T>;
-}
-
-export class Table<T extends Slick.SlickData> extends Widget implements IThemable, IDisposable {
+export class Table<T extends Slick.SlickData> extends Widget implements IDisposable {
 	private styleElement: HTMLStyleElement;
 	private idPrefix: string;
 
 	private _grid: Slick.Grid<T>;
 	private _columns: Slick.Column<T>[];
-	private _data: Slick.DataProvider<T>;
+	private _data: IDisposableDataProvider<T>;
 	private _sorter: ITableSorter<T>;
 
 	private _autoscroll: boolean;
 	private _container: HTMLElement;
 	private _tableContainer: HTMLElement;
 
-	private _classChangeTimeout: number;
-
-	private _disposables: IDisposable[] = [];
+	private _classChangeTimeout: any;
 
 	private _onContextMenu = new Emitter<ITableMouseEvent>();
 	public readonly onContextMenu: Event<ITableMouseEvent> = this._onContextMenu.event;
 
 	private _onClick = new Emitter<ITableMouseEvent>();
 	public readonly onClick: Event<ITableMouseEvent> = this._onClick.event;
+
+	private _onColumnResize = new Emitter<void>();
+	public readonly onColumnResize = this._onColumnResize.event;
 
 	constructor(parent: HTMLElement, configuration?: ITableConfiguration<T>, options?: Slick.GridOptions<T>) {
 		super();
@@ -75,6 +59,8 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 		} else {
 			this._data = configuration.dataProvider;
 		}
+
+		this._register(this._data);
 
 		if (configuration && configuration.columns) {
 			this._columns = configuration.columns;
@@ -111,14 +97,21 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 		if (configuration && configuration.sorter) {
 			this._sorter = configuration.sorter;
 			this._grid.onSort.subscribe((e, args) => {
-				this._sorter.sort(args);
+				this._sorter(args);
 				this._grid.invalidate();
 				this._grid.render();
 			});
 		}
 
+		this._register({
+			dispose: () => {
+				this._grid.destroy();
+			}
+		});
+
 		this.mapMouseEvent(this._grid.onContextMenu, this._onContextMenu);
 		this.mapMouseEvent(this._grid.onClick, this._onClick);
+		this._grid.onColumnsResized.subscribe(() => this._onColumnResize.fire());
 	}
 
 	private mapMouseEvent(slickEvent: Slick.Event<any>, emitter: Emitter<ITableMouseEvent>) {
@@ -131,7 +124,8 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 	}
 
 	public dispose() {
-		dispose(this._disposables);
+		this._container.remove();
+		super.dispose();
 	}
 
 	public invalidateRows(rows: number[], keepEditor: boolean) {
@@ -155,9 +149,9 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 		return this._grid;
 	}
 
-	setData(data: Array<T>);
-	setData(data: TableDataView<T>);
-	setData(data: Array<T> | TableDataView<T>) {
+	setData(data: Array<T>): void;
+	setData(data: TableDataView<T>): void;
+	setData(data: Array<T> | TableDataView<T>): void {
 		if (data instanceof TableDataView) {
 			this._data = data;
 		} else {
@@ -166,7 +160,7 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 		this._grid.setData(this._data, true);
 	}
 
-	getData(): Slick.DataProvider<T> {
+	getData(): IDisposableDataProvider<T> {
 		return this._data;
 	}
 
@@ -328,6 +322,7 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 
 		if (styles.listFocusOutline) {
 			content.push(`.monaco-table.${this.idPrefix}.focused .slick-row .selected { outline: 1px solid ${styles.listFocusOutline}; outline-offset: -1px; }`);
+			content.push(`.monaco-table.${this.idPrefix}.focused .slick-row .selected.active { outline: 2px solid ${styles.listFocusOutline}; outline-offset: -1px; }`);
 		}
 
 		if (styles.listInactiveFocusOutline) {
@@ -339,5 +334,34 @@ export class Table<T extends Slick.SlickData> extends Widget implements IThemabl
 		}
 
 		this.styleElement.innerHTML = content.join('\n');
+	}
+
+	public setOptions(newOptions: Slick.GridOptions<T>) {
+		this._grid.setOptions(newOptions);
+		this._grid.invalidate();
+	}
+
+	public setTableTitle(title: string): void {
+		this._tableContainer.title = title;
+	}
+
+	public removeAriaRowCount(): void {
+		this._tableContainer.removeAttribute('aria-rowcount');
+	}
+
+	public set ariaRowCount(value: number) {
+		this._tableContainer.setAttribute('aria-rowcount', value.toString());
+	}
+
+	public removeAriaColumnCount(): void {
+		this._tableContainer.removeAttribute('aria-colcount');
+	}
+
+	public set ariaColumnCount(value: number) {
+		this._tableContainer.setAttribute('aria-colcount', value.toString());
+	}
+
+	public set ariaRole(value: string) {
+		this._tableContainer.setAttribute('role', value);
 	}
 }

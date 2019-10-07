@@ -5,7 +5,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import { ApiWrapper } from './apiWrapper';
 import { CreateSessionDialog } from './dialogs/profilerCreateSessionDialog';
 
@@ -22,15 +22,15 @@ export class MainController {
 		this._context = context;
 	}
 
-    /**
-     * Deactivates the extension
-     */
+	/**
+	 * Deactivates the extension
+	 */
 	public deactivate(): void {
 	}
 
 	public activate(): void {
-		vscode.commands.registerCommand('profiler.openCreateSessionDialog', (ownerUri: string, templates: Array<sqlops.ProfilerSessionTemplate>) => {
-			let dialog = new CreateSessionDialog(ownerUri, templates);
+		vscode.commands.registerCommand('profiler.openCreateSessionDialog', (ownerUri: string, providerType: string, templates: Array<azdata.ProfilerSessionTemplate>) => {
+			let dialog = new CreateSessionDialog(ownerUri, providerType, templates);
 			dialog.showDialog();
 		});
 	}

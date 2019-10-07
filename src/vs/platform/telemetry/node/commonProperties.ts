@@ -5,39 +5,60 @@
 
 import * as Platform from 'vs/base/common/platform';
 import * as os from 'os';
-import { TPromise } from 'vs/base/common/winjs.base';
 import * as uuid from 'vs/base/common/uuid';
 import { readFile } from 'vs/base/node/pfs';
+import { mixin } from 'vs/base/common/objects';
 
-// {{SQL CARBON EDIT}}
-import product from 'vs/platform/node/product';
+import product from 'vs/platform/product/common/product'; // {{SQL CARBON EDIT}}
+const productObject = product; // {{SQL CARBON EDIT}}
 
-export function resolveCommonProperties(commit: string, version: string, machineId: string, installSourcePath: string): TPromise<{ [name: string]: string; }> {
-	const result: { [name: string]: string; } = Object.create(null);
-
-	// {{SQL CARBON EDIT}}
-	// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
-	// result['common.machineId'] = machineId;
-	result['common.machineId'] = '';
-	// // __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-	// result['sessionID'] = uuid.generateUuid() + Date.now();
-	result['sessionID'] = '';
-
-	// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-	result['commitHash'] = commit;
+export async function resolveCommonProperties(
+	commit: string | undefined,
+	version: string | undefined,
+	machineId: string | undefined,
+	msftInternalDomains: string[] | undefined,
+	installSourcePath: string,
+	product?: string,
+	resolveAdditionalProperties?: () => { [key: string]: any }
+): Promise<{ [name: string]: string | boolean | undefined; }> {
+	const result: { [name: string]: string | boolean | undefined; } = Object.create(null);
+	// {{SQL CARBON EDIT}} start
+	if (productObject.quality !== 'stable') {
+		// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
+		result['common.machineId'] = machineId;
+		// __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+		result['sessionID'] = uuid.generateUuid() + Date.now();
+		// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
+		result['commitHash'] = commit;
+	} else {
+		// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
+		// result['common.machineId'] = machineId;
+		result['common.machineId'] = '';
+		// // __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+		// result['sessionID'] = uuid.generateUuid() + Date.now();
+		result['sessionID'] = '';
+		// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+		result['commitHash'] = '';
+	} // {{SQL CARBON EDIT}} end
 	// __GDPR__COMMON__ "version" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 	result['version'] = version;
 	// __GDPR__COMMON__ "common.platformVersion" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 	result['common.platformVersion'] = (os.release() || '').replace(/^(\d+)(\.\d+)?(\.\d+)?(.*)/, '$1$2$3');
 	// __GDPR__COMMON__ "common.platform" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-	result['common.platform'] = Platform.Platform[Platform.platform];
+	result['common.platform'] = Platform.PlatformToString(Platform.platform);
 	// __GDPR__COMMON__ "common.nodePlatform" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
 	result['common.nodePlatform'] = process.platform;
 	// __GDPR__COMMON__ "common.nodeArch" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
 	result['common.nodeArch'] = process.arch;
+	// __GDPR__COMMON__ "common.product" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
+	result['common.product'] = productObject.nameShort || 'desktop'; // {{SQL CARBON EDIT}}
+	result['common.application.name'] = productObject.nameLong; // {{SQL CARBON EDIT}}
 
-	// {{SQL CARBON EDIT}}
-	result['common.application.name'] = product.nameLong;
+	// const msftInternal = verifyMicrosoftInternalDomain(msftInternalDomains || []); {{SQL CARBON EDIT}} remove msft internal
+	// if (msftInternal) {
+	// 	// __GDPR__COMMON__ "common.msftInternal" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+	// 	result['common.msftInternal'] = msftInternal;
+	// }
 
 	// dynamic properties which value differs on each call
 	let seq = 0;
@@ -60,13 +81,38 @@ export function resolveCommonProperties(commit: string, version: string, machine
 		}
 	});
 
-	return readFile(installSourcePath, 'utf8').then(contents => {
+	if (process.platform === 'linux' && process.env.SNAP && process.env.SNAP_REVISION) {
+		// __GDPR__COMMON__ "common.snap" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+		result['common.snap'] = 'true';
+	}
+
+	try {
+		const contents = await readFile(installSourcePath, 'utf8');
 
 		// __GDPR__COMMON__ "common.source" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 		result['common.source'] = contents.slice(0, 30);
+	} catch (error) {
+		// ignore error
+	}
 
-		return result;
-	}, error => {
-		return result;
-	});
+	if (resolveAdditionalProperties) {
+		mixin(result, resolveAdditionalProperties());
+	}
+
+	return result;
+}
+
+function verifyMicrosoftInternalDomain(domainList: string[]): boolean {
+	if (!process || !process.env || !process.env['USERDNSDOMAIN']) {
+		return false;
+	}
+
+	const domain = process.env['USERDNSDOMAIN']!.toLowerCase();
+	for (let msftDomain of domainList) {
+		if (domain === msftDomain) {
+			return true;
+		}
+	}
+
+	return false;
 }

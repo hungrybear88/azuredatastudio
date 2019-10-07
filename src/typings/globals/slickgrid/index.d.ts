@@ -69,8 +69,8 @@ declare namespace Slick {
 		* @method unsubscribe
 		* @param fn {Function} Event handler to be removed.
 		*/
-		public unsubscribe(fn: (e: EventData, data: T) => any): void;
-		public unsubscribe(fn: (e: DOMEvent, data: T) => any): void;
+		public unsubscribe(fn?: (e: EventData, data: T) => any): void;
+		public unsubscribe(fn?: (e: DOMEvent, data: T) => any): void;
 
 		/***
 		* Fires an event notifying all subscribers.
@@ -96,8 +96,8 @@ declare namespace Slick {
 	export class EventHandler {
 		constructor();
 
-		public subscribe<T>(event: Event<T>, handler: Function): EventHandler;
-		public unsubscribe<T>(event: Event<T>, handler: Function): EventHandler;
+		public subscribe<T>(event: Event<T>, handler: (event: DOMEvent, args: T) => void): EventHandler;
+		public unsubscribe<T>(event: Event<T>, handler: (event: DOMEvent, args: T) => void): EventHandler;
 		public unsubscribeAll(): EventHandler;
 	}
 
@@ -663,6 +663,16 @@ declare namespace Slick {
 		*
 		**/
 		topPanelHeight?: number;
+
+		/**
+		 * Page grid when navigating
+		 */
+		emulatePagingWhenScrolling?: boolean;
+
+		/**
+		 *
+		 */
+		minRowBuffer?: number;
 	}
 
 	export interface DataProvider<T extends SlickData> {
@@ -682,10 +692,14 @@ declare namespace Slick {
 		 * @param index
 		 */
 		getItemMetadata?(index: number): RowMetadata<T>;
+
+		/**
+		 *
+		 */
+		getItems(): Array<T>;
 	}
 
-	export interface SlickData {
-		// todo ? might be able to leave as empty
+	export interface SlickData extends Object {
 	}
 
 	export interface RowMetadata<T> {
@@ -716,7 +730,7 @@ declare namespace Slick {
 			 * Metadata indexed by column index
 			 */
 			[index: number]: ColumnMetadata<T>;
-		}
+		};
 	}
 
 	export interface ColumnMetadata<T extends SlickData> {
@@ -767,7 +781,7 @@ declare namespace Slick {
 		/**
 		 * Sets selected ranges for the grid
 		 */
-		setSelectedRanges(ranges: Slick.Range[]);
+		setSelectedRanges(ranges: Slick.Range[]): void;
 
 		/**
 		 * Gets selected ranges for the grid
@@ -813,10 +827,7 @@ declare namespace Slick {
 		* Returns an array of every data object, unless you're using DataView in which case it returns a DataView object.
 		* @return
 		**/
-		public getData(): any;
-		//public getData(): T[];
-		// Issue: typescript limitation, cannot differentiate calls by return type only, so need to cast to DataView or T[].
-		//public getData(): DataView;
+		public getData(): T[] | DataProvider<T>;
 
 		/**
 		* Returns the databinding item at a given position.
@@ -830,7 +841,7 @@ declare namespace Slick {
 		* @param newData New databinding source using a regular JavaScript array..
 		* @param scrollToTop If true, the grid will reset the vertical scroll position to the top of the grid.
 		**/
-		public setData(newData: T[], scrollToTop: boolean): void;
+		public setData(newData: T[], scrollToTop?: boolean): void;
 
 		/**
 		* Sets a new source for databinding and removes all rendered rows. Note that this doesn't render the new rows - you can follow it with a call to render() to do that.
@@ -1223,7 +1234,7 @@ declare namespace Slick {
 		public render(): void;
 		public invalidate(): void;
 		public invalidateRow(row: number): void;
-		public invalidateRows(rows: number[], keepEditor: boolean): void;
+		public invalidateRows(rows: number[], keepEditor?: boolean): void;
 		public invalidateAllRows(): void;
 		public updateCell(row: number, cell: number): void;
 		public updateRow(row: number): void;
@@ -1231,10 +1242,10 @@ declare namespace Slick {
 		public getRenderedRange(viewportTop?: number, viewportLeft?: number): Viewport;
 		public resizeCanvas(): void;
 		public updateRowCount(): void;
-		public scrollRowIntoView(row: number, doPaging: boolean): void;
+		public scrollRowIntoView(row: number, doPaging?: boolean): void;
 		public scrollRowToTop(row: number): void;
 		public scrollCellIntoView(row: number, cell: number, doPaging: boolean): void;
-		public scrollTo(y: number);
+		public scrollTo(y: number): void;
 		public getCanvasNode(): HTMLCanvasElement;
 		public focus(): void;
 
@@ -1278,7 +1289,7 @@ declare namespace Slick {
 		// the documentation is not enlightening
 		startX: number;
 		startY: number;
-		range: { start: Slick.Cell, end: Slick.Cell };
+		range: { start: Slick.Cell, end?: Slick.Cell };
 	}
 
 	export interface OnDragInitEventArgs<T extends SlickData> extends GridEventArgs<T> {
@@ -1448,7 +1459,7 @@ declare namespace Slick {
 	export interface CellCssStylesHash {
 		[index: number]: {
 			[id: string]: string;
-		}
+		};
 	}
 
 	export interface Viewport {
@@ -1538,7 +1549,7 @@ declare namespace Slick {
 	}
 
 	export interface Formatter<T extends SlickData> {
-        (row: number, cell: number, value: any, columnDef: Column<T>, dataContext: SlickData): string;
+        (row: number, cell: number, value: any, columnDef: Column<T>, dataContext: SlickData): string | undefined;
 	}
 
 	export module Formatters {

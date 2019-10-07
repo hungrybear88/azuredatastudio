@@ -13,22 +13,22 @@ export class FoldingDecorationProvider implements IDecorationProvider {
 	private static COLLAPSED_VISUAL_DECORATION = ModelDecorationOptions.register({
 		stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
 		afterContentClassName: 'inline-folded',
-		linesDecorationsClassName: 'folding collapsed'
+		linesDecorationsClassName: 'codicon codicon-chevron-right'
 	});
 
 	private static EXPANDED_AUTO_HIDE_VISUAL_DECORATION = ModelDecorationOptions.register({
 		stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-		linesDecorationsClassName: 'folding'
+		linesDecorationsClassName: 'codicon codicon-chevron-down'
 	});
 
 	private static EXPANDED_VISUAL_DECORATION = ModelDecorationOptions.register({
 		stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-		linesDecorationsClassName: 'folding alwaysShowFoldIcons'
+		linesDecorationsClassName: 'codicon codicon-chevron-down alwaysShowFoldIcons'
 	});
 
 	public autoHideFoldingControls: boolean = true;
 
-	constructor(private editor: ICodeEditor) {
+	constructor(private readonly editor: ICodeEditor) {
 	}
 
 	getDecorationOption(isCollapsed: boolean): ModelDecorationOptions {

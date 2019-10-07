@@ -10,12 +10,13 @@ import { localize } from 'vs/nls';
 import { Event, Emitter } from 'vs/base/common/event';
 import { deepClone } from 'vs/base/common/objects';
 
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
+import * as resources from 'vs/base/common/resources';
 
 export interface ConnectionProviderProperties {
 	providerId: string;
 	displayName: string;
-	connectionOptions: sqlops.ConnectionOption[];
+	connectionOptions: azdata.ConnectionOption[];
 }
 
 export const Extensions = {
@@ -24,7 +25,7 @@ export const Extensions = {
 
 export interface IConnectionProviderRegistry {
 	registerConnectionProvider(id: string, properties: ConnectionProviderProperties): void;
-	getProperties(id: string): ConnectionProviderProperties;
+	getProperties(id: string): ConnectionProviderProperties | undefined;
 	readonly onNewProvider: Event<{ id: string, properties: ConnectionProviderProperties }>;
 	readonly providers: { [id: string]: ConnectionProviderProperties };
 }
@@ -39,7 +40,7 @@ class ConnectionProviderRegistryImpl implements IConnectionProviderRegistry {
 		this._onNewProvider.fire({ id, properties });
 	}
 
-	public getProperties(id: string): ConnectionProviderProperties {
+	public getProperties(id: string): ConnectionProviderProperties | undefined {
 		return this._providers.get(id);
 	}
 
@@ -65,6 +66,47 @@ const ConnectionProviderContrib: IJSONSchema = {
 		displayName: {
 			type: 'string',
 			description: localize('schema.displayName', "Display Name for the provider")
+		},
+		iconPath: {
+			description: localize('schema.iconPath', "Icon path for the server type"),
+			oneOf: [
+				{
+					type: 'array',
+					items: {
+						type: 'object',
+						properties: {
+							id: {
+								type: 'string',
+							},
+							path: {
+								type: 'object',
+								properties: {
+									light: {
+										type: 'string',
+									},
+									dark: {
+										type: 'string',
+									}
+								}
+							}
+						}
+					}
+				},
+				{
+					type: 'object',
+					properties: {
+						light: {
+							type: 'string',
+						},
+						dark: {
+							type: 'string',
+						}
+					}
+				},
+				{
+					type: 'string'
+				}
+			]
 		},
 		connectionOptions: {
 			type: 'array',
@@ -115,7 +157,7 @@ const ConnectionProviderContrib: IJSONSchema = {
 	required: ['providerId']
 };
 
-ExtensionsRegistry.registerExtensionPoint<ConnectionProviderProperties | ConnectionProviderProperties[]>('connectionProvider', [], ConnectionProviderContrib).setHandler(extensions => {
+ExtensionsRegistry.registerExtensionPoint<ConnectionProviderProperties | ConnectionProviderProperties[]>({ extensionPoint: 'connectionProvider', jsonSchema: ConnectionProviderContrib }).setHandler(extensions => {
 
 	function handleCommand(contrib: ConnectionProviderProperties, extension: IExtensionPointUser<any>) {
 		connectionRegistry.registerConnectionProvider(contrib.providerId, contrib);
@@ -123,6 +165,7 @@ ExtensionsRegistry.registerExtensionPoint<ConnectionProviderProperties | Connect
 
 	for (let extension of extensions) {
 		const { value } = extension;
+		resolveIconPath(extension);
 		if (Array.isArray<ConnectionProviderProperties>(value)) {
 			for (let command of value) {
 				handleCommand(command, extension);
@@ -132,3 +175,39 @@ ExtensionsRegistry.registerExtensionPoint<ConnectionProviderProperties | Connect
 		}
 	}
 });
+
+function resolveIconPath(extension: IExtensionPointUser<any>): void {
+	if (!extension || !extension.value) { return undefined; }
+
+	let toAbsolutePath = (iconPath: any) => {
+		if (!iconPath || !baseDir) { return; }
+		if (Array.isArray(iconPath)) {
+			for (let e of iconPath) {
+				e.path = {
+					light: resources.joinPath(extension.description.extensionLocation, e.path.light),
+					dark: resources.joinPath(extension.description.extensionLocation, e.path.dark)
+				};
+			}
+		} else if (typeof iconPath === 'string') {
+			iconPath = {
+				light: resources.joinPath(extension.description.extensionLocation, iconPath),
+				dark: resources.joinPath(extension.description.extensionLocation, iconPath)
+			};
+		} else {
+			iconPath = {
+				light: resources.joinPath(extension.description.extensionLocation, iconPath.light),
+				dark: resources.joinPath(extension.description.extensionLocation, iconPath.dark)
+			};
+		}
+	};
+
+	let baseDir = extension.description.extensionLocation.fsPath;
+	let properties: ConnectionProviderProperties = extension.value;
+	if (Array.isArray<ConnectionProviderProperties>(properties)) {
+		for (let p of properties) {
+			toAbsolutePath(p['iconPath']);
+		}
+	} else {
+		toAbsolutePath(properties['iconPath']);
+	}
+}

@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 export { OpenDocumentLinkCommand } from './openDocumentLink';
-export { OnPreviewStyleLoadErrorCommand } from './onPreviewStyleLoadError';
 export { ShowPreviewCommand, ShowPreviewToSideCommand, ShowLockedPreviewToSideCommand } from './showPreview';
 export { ShowSourceCommand } from './showSource';
 export { RefreshPreviewCommand } from './refreshPreview';
 export { ShowPreviewSecuritySelectorCommand } from './showPreviewSecuritySelector';
 export { MoveCursorToPositionCommand } from './moveCursorToPosition';
 export { ToggleLockCommand } from './toggleLock';
+export { ShowNotebookPreview } from './showNotebookPreview'; // {{SQL CARBON EDIT}}
+export { RenderDocument } from './renderDocument';

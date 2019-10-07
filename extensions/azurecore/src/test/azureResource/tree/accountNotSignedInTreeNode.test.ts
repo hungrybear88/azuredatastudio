@@ -14,7 +14,7 @@ import { AzureResourceAccountNotSignedInTreeNode } from '../../../azureResource/
 
 describe('AzureResourceAccountNotSignedInTreeNode.info', function(): void {
 	it('Should be correct.', async function(): Promise<void> {
-		const label = 'Sign in to Azure ...';
+		const label = 'Sign in to Azure...';
 
 		const treeNode = new AzureResourceAccountNotSignedInTreeNode();
 
@@ -26,7 +26,7 @@ describe('AzureResourceAccountNotSignedInTreeNode.info', function(): void {
 		should(treeItem.collapsibleState).equal(vscode.TreeItemCollapsibleState.None);
 		should(treeItem.command).not.undefined();
 		should(treeItem.command.title).equal(label);
-		should(treeItem.command.command).equal('azureresource.signin');
+		should(treeItem.command.command).equal('azure.resource.signin');
 
 		const nodeInfo = treeNode.getNodeInfo();
 		should(nodeInfo.isLeaf).true();

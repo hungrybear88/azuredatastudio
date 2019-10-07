@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 import { AgentUtils } from '../agentUtils';
 import { IAgentDialogData, AgentDialogMode } from '../interfaces';
 import { JobData } from './jobData';
+import { JobStepDialog } from '../dialogs/jobStepDialog';
 
 const localize = nls.loadMessageBundle();
 
@@ -26,10 +27,10 @@ export class JobStepData implements IAgentDialogData {
 	public script: string;
 	public scriptName: string;
 	public stepName: string;
-	public subSystem: string;
+	public subSystem: azdata.AgentSubSystem;
 	public id: number;
-	public failureAction: string;
-	public successAction: string;
+	public failureAction: azdata.StepCompletionAction;
+	public successAction: azdata.StepCompletionAction;
 	public successStepId: number;
 	public failStepId: number;
 	public command: string;
@@ -46,11 +47,13 @@ export class JobStepData implements IAgentDialogData {
 	public retryInterval: number;
 	public proxyName: string;
 	private jobModel: JobData;
+	private viaJobDialog: boolean;
 
-	constructor(ownerUri:string, jobModel?: JobData) {
+	constructor(ownerUri: string, jobModel?: JobData, viaJobDialog: boolean = false) {
 		this.ownerUri = ownerUri;
 		this.jobName = jobModel.name;
 		this.jobModel = jobModel;
+		this.viaJobDialog = viaJobDialog;
 	}
 
 	public async initialize() {
@@ -59,18 +62,16 @@ export class JobStepData implements IAgentDialogData {
 	public async save() {
 		let agentService = await AgentUtils.getAgentService();
 		let result: any;
-		if (this.dialogMode === AgentDialogMode.CREATE) {
-			if (this.jobModel && this.jobModel.dialogMode === AgentDialogMode.CREATE) {
-				// create job -> create step
+		// if it's called via the job dialog, add it to the
+		// job model
+		if (this.viaJobDialog) {
+			if (this.jobModel) {
 				Promise.resolve(this);
 				return;
-			} else {
-				// edit job -> create step
-				result = await agentService.createJobStep(this.ownerUri, JobStepData.convertToAgentJobStepInfo(this));
 			}
-		} else if (this.jobModel && this.jobModel.dialogMode === AgentDialogMode.EDIT) {
-			// edit job -> edit step
-			result = await agentService.updateJobStep(this.ownerUri, this.stepName, JobStepData.convertToAgentJobStepInfo(this));
+		} else {
+			// has to be a create step
+			result = await agentService.createJobStep(this.ownerUri, JobStepData.convertToAgentJobStepInfo(this));
 		}
 		if (!result || !result.success) {
 			vscode.window.showErrorMessage(
@@ -95,39 +96,40 @@ export class JobStepData implements IAgentDialogData {
 		};
 	}
 
-	public static convertToJobStepData(jobStepInfo: sqlops.AgentJobStepInfo, jobData: JobData) {
+	public static convertToJobStepData(jobStepInfo: azdata.AgentJobStepInfo, jobData: JobData) {
 		let stepData = new JobStepData(jobData.ownerUri, jobData);
 		stepData.ownerUri = jobData.ownerUri;
 		stepData.jobId = jobStepInfo.jobId;
 		stepData.jobName = jobStepInfo.jobName;
 		stepData.script = jobStepInfo.script;
-		stepData.scriptName = jobStepInfo.scriptName,
-		stepData.stepName = jobStepInfo.stepName,
-		stepData.subSystem = jobStepInfo.subSystem,
-		stepData.id = jobStepInfo.id,
-		stepData.failureAction = jobStepInfo.failureAction,
-		stepData.successAction = jobStepInfo.successAction,
-		stepData.failStepId = jobStepInfo.failStepId,
-		stepData.successStepId = jobStepInfo.successStepId,
-		stepData.command = jobStepInfo.command,
-		stepData.commandExecutionSuccessCode = jobStepInfo.commandExecutionSuccessCode,
-		stepData.databaseName = jobStepInfo.databaseName,
-		stepData.databaseUserName = jobStepInfo.databaseUserName,
-		stepData.server = jobStepInfo.server,
-		stepData.outputFileName = jobStepInfo.outputFileName,
-		stepData.appendToLogFile = jobStepInfo.appendToLogFile,
-		stepData.appendToStepHist = jobStepInfo.appendToStepHist,
-		stepData.writeLogToTable = jobStepInfo.writeLogToTable,
-		stepData.appendLogToTable = jobStepInfo.appendLogToTable,
-		stepData.retryAttempts = jobStepInfo.retryAttempts,
-		stepData.retryInterval = jobStepInfo.retryInterval,
+		stepData.scriptName = jobStepInfo.scriptName;
+		stepData.stepName = jobStepInfo.stepName;
+		stepData.subSystem = jobStepInfo.subSystem;
+		stepData.id = jobStepInfo.id;
+		stepData.failureAction = jobStepInfo.failureAction;
+		stepData.successAction = jobStepInfo.successAction;
+		stepData.failStepId = jobStepInfo.failStepId;
+		stepData.successStepId = jobStepInfo.successStepId;
+		stepData.command = jobStepInfo.command;
+		stepData.commandExecutionSuccessCode = jobStepInfo.commandExecutionSuccessCode;
+		stepData.databaseName = jobStepInfo.databaseName;
+		stepData.databaseUserName = jobStepInfo.databaseUserName;
+		stepData.server = jobStepInfo.server;
+		stepData.outputFileName = jobStepInfo.outputFileName;
+		stepData.appendToLogFile = jobStepInfo.appendToLogFile;
+		stepData.appendToStepHist = jobStepInfo.appendToStepHist;
+		stepData.writeLogToTable = jobStepInfo.writeLogToTable;
+		stepData.appendLogToTable = jobStepInfo.appendLogToTable;
+		stepData.retryAttempts = jobStepInfo.retryAttempts;
+		stepData.retryInterval = jobStepInfo.retryInterval;
 		stepData.proxyName = jobStepInfo.proxyName;
 		stepData.dialogMode = AgentDialogMode.EDIT;
+		stepData.viaJobDialog = true;
 		return stepData;
 	}
 
-	public static convertToAgentJobStepInfo(jobStepData: JobStepData): sqlops.AgentJobStepInfo {
-		let result: sqlops.AgentJobStepInfo = {
+	public static convertToAgentJobStepInfo(jobStepData: JobStepData): azdata.AgentJobStepInfo {
+		let result: azdata.AgentJobStepInfo = {
 			jobId: jobStepData.jobId,
 			jobName: jobStepData.jobName,
 			script: jobStepData.script,
@@ -156,4 +158,115 @@ export class JobStepData implements IAgentDialogData {
 		return result;
 	}
 
+	public static convertToAgentSubSystem(subSystemDisplayName: string): azdata.AgentSubSystem {
+		switch (subSystemDisplayName) {
+			case (JobStepDialog.TSQLScript): {
+				return azdata.AgentSubSystem.TransactSql;
+			}
+			case (JobStepDialog.Powershell): {
+				return azdata.AgentSubSystem.PowerShell;
+			}
+			case (JobStepDialog.CmdExec): {
+				return azdata.AgentSubSystem.CmdExec;
+			}
+			case (JobStepDialog.ReplicationDistributor): {
+				return azdata.AgentSubSystem.Distribution;
+			}
+			case (JobStepDialog.ReplicationMerge): {
+				return azdata.AgentSubSystem.Merge;
+			}
+			case (JobStepDialog.ReplicationQueueReader): {
+				return azdata.AgentSubSystem.QueueReader;
+			}
+			case (JobStepDialog.ReplicationSnapshot): {
+				return azdata.AgentSubSystem.Snapshot;
+			}
+			case (JobStepDialog.ReplicationTransactionLogReader): {
+				return azdata.AgentSubSystem.LogReader;
+			}
+			case (JobStepDialog.AnalysisServicesCommand): {
+				return azdata.AgentSubSystem.AnalysisCommands;
+			}
+			case (JobStepDialog.AnalysisServicesQuery): {
+				return azdata.AgentSubSystem.AnalysisQuery;
+			}
+			case (JobStepDialog.ServicesPackage): {
+				return azdata.AgentSubSystem.Ssis;
+			}
+			default:
+				return azdata.AgentSubSystem.TransactSql;
+		}
+	}
+
+	public static convertToSubSystemDisplayName(subSystem: azdata.AgentSubSystem): string {
+		switch (subSystem) {
+			case (azdata.AgentSubSystem.TransactSql): {
+				return JobStepDialog.TSQLScript;
+			}
+			case (azdata.AgentSubSystem.PowerShell): {
+				return JobStepDialog.Powershell;
+			}
+			case (azdata.AgentSubSystem.CmdExec): {
+				return JobStepDialog.CmdExec;
+			}
+			case (azdata.AgentSubSystem.Distribution): {
+				return JobStepDialog.ReplicationDistributor;
+			}
+			case (azdata.AgentSubSystem.Merge): {
+				return JobStepDialog.ReplicationMerge;
+			}
+			case (azdata.AgentSubSystem.QueueReader): {
+				return JobStepDialog.ReplicationQueueReader;
+			}
+			case (azdata.AgentSubSystem.Snapshot): {
+				return JobStepDialog.ReplicationSnapshot;
+			}
+			case (azdata.AgentSubSystem.LogReader): {
+				return JobStepDialog.ReplicationTransactionLogReader;
+			}
+			case (azdata.AgentSubSystem.AnalysisCommands): {
+				return JobStepDialog.AnalysisServicesCommand;
+			}
+			case (azdata.AgentSubSystem.AnalysisQuery): {
+				return JobStepDialog.AnalysisServicesQuery;
+			}
+			case (azdata.AgentSubSystem.Ssis): {
+				return JobStepDialog.ServicesPackage;
+			}
+			default:
+				return JobStepDialog.TSQLScript;
+		}
+	}
+
+	public static convertToStepCompletionAction(actionDisplayName: string): azdata.StepCompletionAction {
+		switch (actionDisplayName) {
+			case (JobStepDialog.NextStep): {
+				return azdata.StepCompletionAction.GoToNextStep;
+			}
+			case (JobStepDialog.QuitJobReportingSuccess): {
+				return azdata.StepCompletionAction.QuitWithSuccess;
+			}
+			case (JobStepDialog.QuitJobReportingFailure): {
+				return azdata.StepCompletionAction.QuitWithFailure;
+			}
+			default:
+				return azdata.StepCompletionAction.GoToNextStep;
+		}
+	}
+
+	public static convertToCompletionActionDisplayName(stepCompletionAction: azdata.StepCompletionAction): string {
+		switch (stepCompletionAction) {
+			case (azdata.StepCompletionAction.GoToNextStep): {
+				return JobStepDialog.NextStep;
+			}
+			case (azdata.StepCompletionAction.QuitWithFailure): {
+				return JobStepDialog.QuitJobReportingFailure;
+			}
+			case (azdata.StepCompletionAction.QuitWithSuccess): {
+				return JobStepDialog.QuitJobReportingSuccess;
+			}
+			default:
+				return JobStepDialog.NextStep;
+		}
+	}
 }

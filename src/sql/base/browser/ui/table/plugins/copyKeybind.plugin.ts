@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { KeyCode, KeyMod } from 'vs/base/common/keyCodes';
 import { Emitter, Event } from 'vs/base/common/event';
@@ -22,7 +20,7 @@ export class CopyKeybind<T> implements Slick.Plugin<T> {
 
 	public init(grid: Slick.Grid<T>) {
 		this.grid = grid;
-		this.handler.subscribe(this.grid.onKeyDown, (e, args) => this.handleKeyDown(e, args));
+		this.handler.subscribe(this.grid.onKeyDown, (e: KeyboardEvent, args: Slick.OnKeyDownEventArgs<T>) => this.handleKeyDown(e, args));
 	}
 
 	public destroy() {
@@ -47,7 +45,7 @@ export class CopyKeybind<T> implements Slick.Plugin<T> {
 				if (!isUndefinedOrNull(this.grid.getColumns()[0].selectable) && !this.grid.getColumns()[0].selectable) {
 					startColumn = 1;
 				}
-				ranges = [new Slick.Range(selectedRows[0], startColumn, selectedRows[selectedRows.length - 1], this.grid.getColumns().length)]
+				ranges = [new Slick.Range(selectedRows[0], startColumn, selectedRows[selectedRows.length - 1], this.grid.getColumns().length)];
 			}
 			this._onCopy.fire(ranges);
 		}

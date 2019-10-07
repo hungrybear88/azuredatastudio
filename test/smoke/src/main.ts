@@ -11,8 +11,22 @@ import * as tmp from 'tmp';
 import * as rimraf from 'rimraf';
 import * as mkdirp from 'mkdirp';
 import { ncp } from 'ncp';
-import { Application, Quality } from './application';
+import {
+	Application,
+	Quality,
+	ApplicationOptions,
+	MultiLogger,
+	Logger,
+	ConsoleLogger,
+	FileLogger,
+} from '../../automation';
 
+//{{SQL CARBON EDIT}}
+import { setup as runProfilerTests } from './sql/profiler/profiler.test';
+import { setup as runQueryEditorTests } from './sql/queryEditor/queryEditor.test';
+
+//Original
+/*
 import { setup as setupDataMigrationTests } from './areas/workbench/data-migration.test';
 import { setup as setupDataLossTests } from './areas/workbench/data-loss.test';
 import { setup as setupDataExplorerTests } from './areas/explorer/explorer.test';
@@ -27,7 +41,12 @@ import { setup as setupDataExtensionTests } from './areas/extensions/extensions.
 import { setup as setupTerminalTests } from './areas/terminal/terminal.test';
 import { setup as setupDataMultirootTests } from './areas/multiroot/multiroot.test';
 import { setup as setupDataLocalizationTests } from './areas/workbench/localization.test';
-import { MultiLogger, Logger, ConsoleLogger, FileLogger } from './logger';
+import { setup as setupLaunchTests } from './areas/workbench/launch.test';*///{{END}}
+
+if (!/^v10/.test(process.version)) {
+	console.error('Error: Smoketest must be run using Node 10. Currently running', process.version);
+	process.exit(1);
+}
 
 const tmpDir = tmp.dirSync({ prefix: 't' }) as { name: string; removeCallback: Function; };
 const testDataPath = tmpDir.name;
@@ -44,14 +63,16 @@ const opts = minimist(args, {
 		'log'
 	],
 	boolean: [
-		'verbose'
+		'verbose',
+		'remote',
+		'web',
+		'headless'
 	],
 	default: {
 		verbose: false
 	}
 });
 
-const workspaceFilePath = path.join(testDataPath, 'smoketest.code-workspace');
 const testRepoUrl = 'https://github.com/Microsoft/vscode-smoketest-express';
 const workspacePath = path.join(testDataPath, 'vscode-smoketest-express');
 const extensionsPath = path.join(testDataPath, 'extensions-dir');
@@ -108,16 +129,16 @@ function getBuildElectronPath(root: string): string {
 }
 
 let testCodePath = opts.build;
-// let stableCodePath = opts['stable-build'];
+let stableCodePath = opts['stable-build'];
 let electronPath: string;
-// let stablePath: string;
+let stablePath: string | undefined = undefined;
 
 if (testCodePath) {
 	electronPath = getBuildElectronPath(testCodePath);
 
-	// if (stableCodePath) {
-	// 	stablePath = getBuildElectronPath(stableCodePath);
-	// }
+	if (stableCodePath) {
+		stablePath = getBuildElectronPath(stableCodePath);
+	}
 } else {
 	testCodePath = getDevElectronPath();
 	electronPath = testCodePath;
@@ -126,8 +147,12 @@ if (testCodePath) {
 	process.env.VSCODE_CLI = '1';
 }
 
-if (!fs.existsSync(electronPath || '')) {
+if (!opts.web && !fs.existsSync(electronPath || '')) {
 	fail(`Can't find Code at ${electronPath}.`);
+}
+
+if (typeof stablePath === 'string' && !fs.existsSync(stablePath)) {
+	fail(`Can't find Stable Code at ${stablePath}.`);
 }
 
 const userDataDir = path.join(testDataPath, 'd');
@@ -141,43 +166,17 @@ if (process.env.VSCODE_DEV === '1') {
 	quality = Quality.Stable;
 }
 
-function toUri(path: string): string {
-	if (process.platform === 'win32') {
-		return `${path.replace(/\\/g, '/')}`;
-	}
-
-	return `${path}`;
-}
-
-async function createWorkspaceFile(): Promise<void> {
-	if (fs.existsSync(workspaceFilePath)) {
-		return;
-	}
-
-	console.log('*** Creating workspace file...');
-	const workspace = {
-		folders: [
-			{
-				path: toUri(path.join(workspacePath, 'public'))
-			},
-			{
-				path: toUri(path.join(workspacePath, 'routes'))
-			},
-			{
-				path: toUri(path.join(workspacePath, 'views'))
-			}
-		]
-	};
-
-	fs.writeFileSync(workspaceFilePath, JSON.stringify(workspace, null, '\t'));
-}
-
 async function setupRepository(): Promise<void> {
 	if (opts['test-repo']) {
 		console.log('*** Copying test project repository:', opts['test-repo']);
 		rimraf.sync(workspacePath);
 		// not platform friendly
-		cp.execSync(`cp -R "${opts['test-repo']}" "${workspacePath}"`);
+		if (process.platform === 'win32') {
+			cp.execSync(`xcopy /E "${opts['test-repo']}" "${workspacePath}"\\*`);
+		} else {
+			cp.execSync(`cp -R "${opts['test-repo']}" "${workspacePath}"`);
+		}
+
 	} else {
 		if (!fs.existsSync(workspacePath)) {
 			console.log('*** Cloning test project repository...');
@@ -198,13 +197,12 @@ async function setup(): Promise<void> {
 	console.log('*** Test data:', testDataPath);
 	console.log('*** Preparing smoketest setup...');
 
-	await createWorkspaceFile();
 	await setupRepository();
 
 	console.log('*** Smoketest setup done!\n');
 }
 
-function createApp(quality: Quality): Application {
+function createOptions(): ApplicationOptions {
 	const loggers: Logger[] = [];
 
 	if (opts.verbose) {
@@ -217,25 +215,28 @@ function createApp(quality: Quality): Application {
 		loggers.push(new FileLogger(opts.log));
 		log = 'trace';
 	}
-
-	return new Application({
+	return {
 		quality,
 		codePath: opts.build,
 		workspacePath,
 		userDataDir,
 		extensionsPath,
-		workspaceFilePath,
 		waitTime: parseInt(opts['wait-time'] || '0') || 20,
 		logger: new MultiLogger(loggers),
 		verbose: opts.verbose,
-		log
-	});
+		log,
+		screenshotsPath,
+		remote: opts.remote,
+		web: opts.web,
+		headless: opts.headless
+	};
 }
 
 before(async function () {
 	// allow two minutes for setup
 	this.timeout(2 * 60 * 1000);
 	await setup();
+	this.defaultOptions = createOptions();
 });
 
 after(async function () {
@@ -249,16 +250,30 @@ after(async function () {
 
 	await new Promise((c, e) => rimraf(testDataPath, { maxBusyTries: 10 }, err => err ? e(err) : c()));
 });
+/*//{{SQL CARBON EDIT}}
+if (!opts.web) {
+	setupDataMigrationTests(stableCodePath, testDataPath);
+}*/
 
-describe('Data Migration', () => {
-	setupDataMigrationTests(userDataDir, createApp);
-});
-
-describe('Test', () => {
+describe('Running Code', () => {
 	before(async function () {
-		const app = createApp(quality);
-		await app!.start();
+		const app = new Application(this.defaultOptions);
+		await app!.start(opts.web ? false : undefined);
 		this.app = app;
+		//{{SQL CARBON EDIT}}
+		const testExtLoadedText = 'Test Extension Loaded';
+		const testSetupCompletedText = 'Test Setup Completed';
+		const allExtensionsLoadedText = 'All Extensions Loaded';
+		const setupTestCommand = 'Test: Setup Integration Test';
+		const waitForExtensionsCommand = 'Test: Wait For Extensions To Load';
+		await app.workbench.statusbar.waitForStatusbarText(testExtLoadedText, testExtLoadedText);
+		await app.workbench.quickopen.runCommand(setupTestCommand);
+		await app.workbench.statusbar.waitForStatusbarText(testSetupCompletedText, testSetupCompletedText);
+		await app!.reload();
+		await app.workbench.statusbar.waitForStatusbarText(testExtLoadedText, testExtLoadedText);
+		await app.workbench.quickopen.runCommand(waitForExtensionsCommand);
+		await app.workbench.statusbar.waitForStatusbarText(allExtensionsLoadedText, allExtensionsLoadedText);
+		//{{END}}
 	});
 
 	after(async function () {
@@ -270,19 +285,10 @@ describe('Test', () => {
 			if (this.currentTest.state !== 'failed') {
 				return;
 			}
-
 			const app = this.app as Application;
-			const raw = await app.capturePage();
-			const buffer = new Buffer(raw, 'base64');
-
 			const name = this.currentTest.fullTitle().replace(/[^a-z0-9\-]/ig, '_');
-			const screenshotPath = path.join(screenshotsPath, `${name}.png`);
 
-			if (opts.log) {
-				app.logger.log('*** Screenshot recorded:', screenshotPath);
-			}
-
-			fs.writeFileSync(screenshotPath, buffer);
+			await app.captureScreenshot(name);
 		});
 	}
 
@@ -294,18 +300,27 @@ describe('Test', () => {
 			app.logger.log('*** Test start:', title);
 		});
 	}
-
-	setupDataLossTests();
+	//{{SQL CARBON EDIT}}
+	runProfilerTests();
+	runQueryEditorTests();
+	/*
+	if (!opts.web) { setupDataLossTests(); }
 	setupDataExplorerTests();
-	setupDataPreferencesTests();
+	if (!opts.web) { setupDataPreferencesTests(); }
 	setupDataSearchTests();
 	setupDataCSSTests();
 	setupDataEditorTests();
-	setupDataDebugTests();
+	if (!opts.web) { setupDataDebugTests(); }
 	setupDataGitTests();
 	setupDataStatusbarTests();
 	setupDataExtensionTests();
 	setupTerminalTests();
-	setupDataMultirootTests();
+	if (!opts.web) { setupDataMultirootTests(); }
 	setupDataLocalizationTests();
+	*/
+	//{{END}}
 });
+/*//{{SQL CARBON EDIT}}
+if (!opts.web) {
+	setupLaunchTests();
+}*/

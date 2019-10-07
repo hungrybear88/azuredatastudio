@@ -2,8 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
-
 import * as assert from 'assert';
 import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
 
@@ -16,7 +14,7 @@ function createContext(ctx: any) {
 }
 
 suite('ContextKeyExpr', () => {
-	test('ContextKeyExpr.equals', function () {
+	test('ContextKeyExpr.equals', () => {
 		let a = ContextKeyExpr.and(
 			ContextKeyExpr.has('a1'),
 			ContextKeyExpr.and(ContextKeyExpr.has('and.a')),
@@ -29,47 +27,44 @@ suite('ContextKeyExpr', () => {
 			ContextKeyExpr.notEquals('c2', 'cc2'),
 			ContextKeyExpr.not('d1'),
 			ContextKeyExpr.not('d2'),
-			// {{SQL CARBON EDIT}}
-			ContextKeyExpr.greaterThanEquals('e1', 'ee1'),
-			ContextKeyExpr.greaterThanEquals('e2', 'ee2'),
-			ContextKeyExpr.lessThanEquals('f1', 'ff1'),
-			ContextKeyExpr.lessThanEquals('f2', 'ff2')
-			//
-		);
+			ContextKeyExpr.greaterThanEquals('e1', 'ee1'), // {{SQL CARBON EDIT}} add test case
+			ContextKeyExpr.greaterThanEquals('e2', 'ee2'), // {{SQL CARBON EDIT}} add test case
+			ContextKeyExpr.lessThanEquals('f1', 'ff1'), // {{SQL CARBON EDIT}} add test case
+			ContextKeyExpr.lessThanEquals('f2', 'ff2'), // {{SQL CARBON EDIT}} add test case
+		)!;
 		let b = ContextKeyExpr.and(
-			// {{SQL CARBON EDIT}}
-			ContextKeyExpr.greaterThanEquals('e2', 'ee2'),
+			ContextKeyExpr.lessThanEquals('f1', 'ff1'), // {{SQL CARBON EDIT}}
+			ContextKeyExpr.lessThanEquals('f2', 'ff2'), // {{SQL CARBON EDIT}}
+			ContextKeyExpr.greaterThanEquals('e2', 'ee2'), // {{SQL CARBON EDIT}}
+			ContextKeyExpr.greaterThanEquals('e1', 'ee1'), // {{SQL CARBON EDIT}}
 			ContextKeyExpr.equals('b2', 'bb2'),
 			ContextKeyExpr.notEquals('c1', 'cc1'),
 			ContextKeyExpr.not('d1'),
-			ContextKeyExpr.lessThanEquals('f1', 'ff1'),
 			ContextKeyExpr.regex('d4', /\*\*3*/),
-			ContextKeyExpr.greaterThanEquals('e1', 'ee1'),
 			ContextKeyExpr.notEquals('c2', 'cc2'),
 			ContextKeyExpr.has('a2'),
 			ContextKeyExpr.equals('b1', 'bb1'),
 			ContextKeyExpr.regex('d3', /d.*/),
 			ContextKeyExpr.has('a1'),
-			ContextKeyExpr.lessThanEquals('f2', 'ff2'),
 			ContextKeyExpr.and(ContextKeyExpr.equals('and.a', true)),
 			ContextKeyExpr.not('d2')
-		);
+		)!;
 		assert(a.equals(b), 'expressions should be equal');
 	});
 
-	test('normalize', function () {
+	test('normalize', () => {
 		let key1IsTrue = ContextKeyExpr.equals('key1', true);
 		let key1IsNotFalse = ContextKeyExpr.notEquals('key1', false);
 		let key1IsFalse = ContextKeyExpr.equals('key1', false);
 		let key1IsNotTrue = ContextKeyExpr.notEquals('key1', true);
 
-		assert.ok(key1IsTrue.normalize().equals(ContextKeyExpr.has('key1')));
-		assert.ok(key1IsNotFalse.normalize().equals(ContextKeyExpr.has('key1')));
-		assert.ok(key1IsFalse.normalize().equals(ContextKeyExpr.not('key1')));
-		assert.ok(key1IsNotTrue.normalize().equals(ContextKeyExpr.not('key1')));
+		assert.ok(key1IsTrue.equals(ContextKeyExpr.has('key1')));
+		assert.ok(key1IsNotFalse.equals(ContextKeyExpr.has('key1')));
+		assert.ok(key1IsFalse.equals(ContextKeyExpr.not('key1')));
+		assert.ok(key1IsNotTrue.equals(ContextKeyExpr.not('key1')));
 	});
 
-	test('evaluate', function () {
+	test('evaluate', () => {
 		/* tslint:disable:triple-equals */
 		let context = createContext({
 			'a': true,
@@ -80,7 +75,7 @@ suite('ContextKeyExpr', () => {
 		function testExpression(expr: string, expected: boolean): void {
 			// console.log(expr + ' ' + expected);
 			let rules = ContextKeyExpr.deserialize(expr);
-			assert.equal(rules.evaluate(context), expected, expr);
+			assert.equal(rules!.evaluate(context), expected, expr);
 		}
 		function testBatch(expr: string, value: any): void {
 			testExpression(expr, !!value);
@@ -110,5 +105,24 @@ suite('ContextKeyExpr', () => {
 		testExpression('a && !b && c == 5', true && !false && '5' == '5');
 		testExpression('d =~ /e.*/', false);
 		/* tslint:enable:triple-equals */
+
+		// precedence test: false && true || true === true because && is evaluated first
+		testExpression('b && a || a', true);
+
+		testExpression('a || b', true);
+		testExpression('b || b', false);
+		testExpression('b && a || a && b', false);
+	});
+
+	test('negate', () => {
+		function testNegate(expr: string, expected: string): void {
+			const actual = ContextKeyExpr.deserialize(expr)!.negate().serialize();
+			assert.strictEqual(actual, expected);
+		}
+		testNegate('a', '!a');
+		testNegate('a && b || c', '!a && !c || !b && !c');
+		testNegate('a && b || c || d', '!a && !c && !d || !b && !c && !d');
+		testNegate('!a && !b || !c && !d', 'a && c || a && d || b && c || b && d');
+		testNegate('!a && !b || !c && !d || !e && !f', 'a && c && e || a && c && f || a && d && e || a && d && f || b && c && e || b && c && f || b && d && e || b && d && f');
 	});
 });

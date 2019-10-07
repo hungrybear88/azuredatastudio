@@ -5,7 +5,7 @@
 
 'use strict';
 import * as nls from 'vscode-nls';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import * as vscode from 'vscode';
 import { ScheduleData } from '../data/scheduleData';
 
@@ -21,8 +21,8 @@ export class ScheduleDialog {
 	private readonly SchedulesLabelText: string = localize('scheduleDialog.schedules', 'Schedules');
 
 	// UI Components
-	private dialog: sqlops.window.modelviewdialog.Dialog;
-	private schedulesTable: sqlops.TableComponent;
+	private dialog: azdata.window.Dialog;
+	private schedulesTable: azdata.TableComponent;
 
 	private model: ScheduleData;
 
@@ -35,14 +35,14 @@ export class ScheduleDialog {
 
 	public async showDialog() {
 		await this.model.initialize();
-		this.dialog = sqlops.window.modelviewdialog.createDialog(this.DialogTitle);
+		this.dialog = azdata.window.createModelViewDialog(this.DialogTitle);
 		this.initializeContent();
 		this.dialog.okButton.onClick(async () => await this.execute());
 		this.dialog.cancelButton.onClick(async () => await this.cancel());
 		this.dialog.okButton.label = this.OkButtonText;
 		this.dialog.cancelButton.label = this.CancelButtonText;
 
-		sqlops.window.modelviewdialog.openDialog(this.dialog);
+		azdata.window.openDialog(this.dialog);
 	}
 
 	private initializeContent() {
@@ -69,7 +69,7 @@ export class ScheduleDialog {
 				let data: any[][] = [];
 				for (let i = 0; i < this.model.schedules.length; ++i) {
 					let schedule = this.model.schedules[i];
-					data[i] = [ schedule.name ];
+					data[i] = [schedule.name];
 				}
 				this.schedulesTable.data = data;
 			}

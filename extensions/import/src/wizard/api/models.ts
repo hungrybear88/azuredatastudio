@@ -4,17 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 
 /**
  * The main data model that communicates between the pages.
  */
 export interface ImportDataModel {
+	server: azdata.connection.Connection;
+	serverId: string;
 	ownerUri: string;
 	proseColumns: ColumnMetadata[];
 	proseDataPreview: string[][];
-	server: sqlops.connection.Connection;
-	serverId: string;
 	database: string;
 	table: string;
 	schema: string;

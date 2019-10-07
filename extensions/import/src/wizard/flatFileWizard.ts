@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
-import * as sqlops from 'sqlops';
+import * as azdata from 'azdata';
 import { FlatFileProvider } from '../services/contracts';
 import { ImportDataModel } from './api/models';
 import { ImportPage } from './api/importPage';
@@ -20,9 +20,9 @@ const localize = nls.loadMessageBundle();
 
 export class FlatFileWizard {
 	private readonly provider: FlatFileProvider;
-	private wizard: sqlops.window.modelviewdialog.Wizard;
+	private wizard: azdata.window.Wizard;
 
-	private importAnotherFileButton: sqlops.window.modelviewdialog.Button;
+	private importAnotherFileButton: azdata.window.Button;
 
 	constructor(provider: FlatFileProvider) {
 		this.provider = provider;
@@ -31,7 +31,7 @@ export class FlatFileWizard {
 	public async start(p: any, ...args: any[]) {
 		let model = <ImportDataModel>{};
 
-		let profile = <sqlops.IConnectionProfile>p.connectionProfile;
+		let profile = p ? <azdata.IConnectionProfile>p.connectionProfile : null;
 		if (profile) {
 			model.serverId = profile.id;
 			model.database = profile.databaseName;
@@ -40,17 +40,20 @@ export class FlatFileWizard {
 		let pages: Map<number, ImportPage> = new Map<number, ImportPage>();
 
 
-		let connections = await sqlops.connection.getActiveConnections();
+		let connections = await azdata.connection.getActiveConnections();
 		if (!connections || connections.length === 0) {
 			vscode.window.showErrorMessage(localize('import.needConnection', 'Please connect to a server before using this wizard.'));
 			return;
 		}
 
-		this.wizard = sqlops.window.modelviewdialog.createWizard(localize('flatFileImport.wizardName', 'Import flat file wizard'));
-		let page1 = sqlops.window.modelviewdialog.createWizardPage(localize('flatFileImport.page1Name', 'Specify Input File'));
-		let page2 = sqlops.window.modelviewdialog.createWizardPage(localize('flatFileImport.page2Name', 'Preview Data'));
-		let page3 = sqlops.window.modelviewdialog.createWizardPage(localize('flatFileImport.page3Name', 'Modify Columns'));
-		let page4 = sqlops.window.modelviewdialog.createWizardPage(localize('flatFileImport.page4Name', 'Summary'));
+		let currentConnection = await azdata.connection.getCurrentConnection();
+		model.serverId = currentConnection.connectionId;
+
+		this.wizard = azdata.window.createWizard(localize('flatFileImport.wizardName', 'Import flat file wizard'));
+		let page1 = azdata.window.createWizardPage(localize('flatFileImport.page1Name', 'Specify Input File'));
+		let page2 = azdata.window.createWizardPage(localize('flatFileImport.page2Name', 'Preview Data'));
+		let page3 = azdata.window.createWizardPage(localize('flatFileImport.page3Name', 'Modify Columns'));
+		let page4 = azdata.window.createWizardPage(localize('flatFileImport.page4Name', 'Summary'));
 
 		let fileConfigPage: FileConfigPage;
 
@@ -86,7 +89,7 @@ export class FlatFileWizard {
 		});
 
 
-		this.importAnotherFileButton = sqlops.window.modelviewdialog.createButton(localize('flatFileImport.importNewFile', 'Import new file'));
+		this.importAnotherFileButton = azdata.window.createButton(localize('flatFileImport.importNewFile', 'Import new file'));
 		this.importAnotherFileButton.onClick(() => {
 			//TODO replace this with proper cleanup for all the pages
 			this.wizard.close();
@@ -96,24 +99,17 @@ export class FlatFileWizard {
 
 		this.importAnotherFileButton.hidden = true;
 		this.wizard.customButtons = [this.importAnotherFileButton];
-
 		this.wizard.onPageChanged(async (event) => {
-			let idx = event.newPage;
-
-			let page = pages.get(idx);
-
-			if (page) {
-				page.setupNavigationValidator();
-				page.onPageEnter();
+			let newPageIdx = event.newPage;
+			let lastPageIdx = event.lastPage;
+			let newPage = pages.get(newPageIdx);
+			let lastPage = pages.get(lastPageIdx);
+			if (lastPage) {
+				await lastPage.onPageLeave();
 			}
-		});
-
-		this.wizard.onPageChanged(async (event) => {
-			let idx = event.lastPage;
-
-			let page = pages.get(idx);
-			if (page) {
-				page.onPageLeave();
+			if (newPage) {
+				newPage.setupNavigationValidator();
+				await newPage.onPageEnter();
 			}
 		});
 
@@ -129,7 +125,7 @@ export class FlatFileWizard {
 		this.importAnotherFileButton.hidden = !visibility;
 	}
 
-	public registerNavigationValidator(validator: (pageChangeInfo: sqlops.window.modelviewdialog.WizardPageChangeInfo) => boolean) {
+	public registerNavigationValidator(validator: (pageChangeInfo: azdata.window.WizardPageChangeInfo) => boolean) {
 		this.wizard.registerNavigationValidator(validator);
 	}
 
