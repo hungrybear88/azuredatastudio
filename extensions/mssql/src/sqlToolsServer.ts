@@ -9,10 +9,9 @@ import * as Constants from './constants';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { getCommonLaunchArgsAndCleanupOldLogFiles } from './utils';
-import { localize } from './localize';
 import { Telemetry, LanguageClientErrorHandler } from './telemetry';
 import { SqlOpsDataClient, ClientOptions } from 'dataprotocol-client';
-import { TelemetryFeature, AgentServicesFeature, SerializationFeature } from './features';
+import { TelemetryFeature, AgentServicesFeature, SerializationFeature, AccountFeature, SqlAssessmentServicesFeature } from './features';
 import { CredentialStore } from './credentialstore/credentialstore';
 import { AzureResourceProvider } from './resourceProvider/resourceProvider';
 import { SchemaCompareService } from './schemaCompare/schemaCompareService';
@@ -21,7 +20,11 @@ import { DacFxService } from './dacfx/dacFxService';
 import { CmsService } from './cms/cmsService';
 import { CompletionExtensionParams, CompletionExtLoadRequest } from './contracts';
 import { promises as fs } from 'fs';
+import * as nls from 'vscode-nls';
+import { LanguageExtensionService } from './languageExtension/languageExtensionService';
+import { SqlAssessmentService } from './sqlAssessment/sqlAssessmentService';
 
+const localize = nls.loadMessageBundle();
 const outputChannel = vscode.window.createOutputChannel(Constants.serviceName);
 const statusView = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
 
@@ -69,9 +72,10 @@ export class SqlToolsServer {
 	}
 
 	private async download(context: AppContext): Promise<string> {
-		const rawConfig = await fs.readFile(path.join(context.extensionContext.extensionPath, 'config.json'));
+		const configDir = context.extensionContext.extensionPath;
+		const rawConfig = await fs.readFile(path.join(configDir, 'config.json'));
 		this.config = JSON.parse(rawConfig.toString());
-		this.config.installDirectory = path.join(__dirname, this.config.installDirectory);
+		this.config.installDirectory = path.join(configDir, this.config.installDirectory);
 		this.config.proxy = vscode.workspace.getConfiguration('http').get('proxy');
 		this.config.strictSSL = vscode.workspace.getConfiguration('http').get('proxyStrictSSL') || true;
 
@@ -129,8 +133,8 @@ function generateHandleServerProviderEvent() {
 			case Events.DOWNLOAD_END:
 				outputChannel.appendLine(localize('downloadServiceDoneChannelMsg', "Done installing {0}", Constants.serviceName));
 				break;
-			default:
-				console.error(`Unknown event from Server Provider ${e}`);
+			case Events.ENTRY_EXTRACTED:
+				outputChannel.appendLine(localize('entryExtractedChannelMsg', "Extracted {0} ({1}/{2})", args[0], args[1], args[2]));
 				break;
 		}
 	};
@@ -148,11 +152,15 @@ function getClientOptions(context: AppContext): ClientOptions {
 			// we only want to add new features
 			...SqlOpsDataClient.defaultFeatures,
 			TelemetryFeature,
+			AccountFeature,
 			AgentServicesFeature,
 			SerializationFeature,
+			SqlAssessmentServicesFeature,
 			SchemaCompareService.asFeature(context),
+			LanguageExtensionService.asFeature(context),
 			DacFxService.asFeature(context),
-			CmsService.asFeature(context)
+			CmsService.asFeature(context),
+			SqlAssessmentService.asFeature(context)
 		],
 		outputChannel: new CustomOutputChannel()
 	};

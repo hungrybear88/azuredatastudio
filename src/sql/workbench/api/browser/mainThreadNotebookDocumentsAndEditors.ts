@@ -20,19 +20,25 @@ import {
 	SqlMainContext, MainThreadNotebookDocumentsAndEditorsShape, SqlExtHostContext, ExtHostNotebookDocumentsAndEditorsShape,
 	INotebookDocumentsAndEditorsDelta, INotebookEditorAddData, INotebookShowOptions, INotebookModelAddedData, INotebookModelChangedData
 } from 'sql/workbench/api/common/sqlExtHost.protocol';
-import { NotebookInput } from 'sql/workbench/parts/notebook/browser/models/notebookInput';
+import { NotebookInput } from 'sql/workbench/contrib/notebook/browser/models/notebookInput';
 import { INotebookService, INotebookEditor } from 'sql/workbench/services/notebook/browser/notebookService';
 import { ISingleNotebookEditOperation, NotebookChangeKind } from 'sql/workbench/api/common/sqlExtHostTypes';
 import { disposed } from 'vs/base/common/errors';
-import { ICellModel, NotebookContentChange, INotebookModel } from 'sql/workbench/parts/notebook/browser/models/modelInterfaces';
-import { NotebookChangeType, CellTypes } from 'sql/workbench/parts/notebook/common/models/contracts';
+import { ICellModel, NotebookContentChange, INotebookModel } from 'sql/workbench/services/notebook/browser/models/modelInterfaces';
+import { NotebookChangeType, CellTypes } from 'sql/workbench/services/notebook/common/contracts';
 import { ICapabilitiesService } from 'sql/platform/capabilities/common/capabilitiesService';
-import { IUntitledEditorService } from 'vs/workbench/services/untitled/common/untitledEditorService';
 import { IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
 import { viewColumnToEditorGroup } from 'vs/workbench/api/common/shared/editor';
-import { notebookModeId } from 'sql/workbench/browser/customInputConverter';
 import { localize } from 'vs/nls';
 import { IFileService } from 'vs/platform/files/common/files';
+import { UntitledNotebookInput } from 'sql/workbench/contrib/notebook/browser/models/untitledNotebookInput';
+import { FileNotebookInput } from 'sql/workbench/contrib/notebook/browser/models/fileNotebookInput';
+import { find } from 'vs/base/common/arrays';
+import { IUntitledTextEditorService } from 'vs/workbench/services/untitled/common/untitledTextEditorService';
+import { UntitledTextEditorInput } from 'vs/workbench/services/untitled/common/untitledTextEditorInput';
+import { FileEditorInput } from 'vs/workbench/contrib/files/common/editors/fileEditorInput';
+import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
+import { UntitledTextEditorModel } from 'vs/workbench/services/untitled/common/untitledTextEditorModel';
 
 class MainThreadNotebookEditor extends Disposable {
 	private _contentChangedEmitter = new Emitter<NotebookContentChange>();
@@ -40,7 +46,7 @@ class MainThreadNotebookEditor extends Disposable {
 	private _providerId: string = '';
 	private _providers: string[] = [];
 
-	constructor(public readonly editor: INotebookEditor) {
+	constructor(public readonly editor: INotebookEditor, private readonly textFileService: ITextFileService) {
 		super();
 		editor.modelReady.then(model => {
 			this._providerId = model.providerId;
@@ -90,7 +96,7 @@ class MainThreadNotebookEditor extends Disposable {
 	}
 
 	public save(): Thenable<boolean> {
-		return this.editor.notebookParams.input.save();
+		return this.textFileService.save(this.uri).then(uri => !!uri);
 	}
 
 	public matches(input: NotebookInput): boolean {
@@ -323,13 +329,14 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 	private _modelToDisposeMap = new Map<string, DisposableStore>();
 	constructor(
 		extHostContext: IExtHostContext,
-		@IUntitledEditorService private _untitledEditorService: IUntitledEditorService,
+		@IUntitledTextEditorService private _untitledEditorService: IUntitledTextEditorService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
 		@IEditorService private _editorService: IEditorService,
 		@IEditorGroupsService private _editorGroupService: IEditorGroupsService,
 		@ICapabilitiesService private _capabilitiesService: ICapabilitiesService,
 		@INotebookService private readonly _notebookService: INotebookService,
-		@IFileService private readonly _fileService: IFileService
+		@IFileService private readonly _fileService: IFileService,
+		@ITextFileService private readonly _textFileService: ITextFileService
 	) {
 		super();
 		if (extHostContext) {
@@ -345,7 +352,7 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 		let uriString = URI.revive(uri).toString();
 		let editor = this._notebookEditors.get(uriString);
 		if (editor) {
-			return editor.save();
+			return editor.save().then(uri => !!uri);
 		} else {
 			return Promise.resolve(false);
 		}
@@ -353,6 +360,11 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 
 	$tryShowNotebookDocument(resource: UriComponents, options: INotebookShowOptions): Promise<string> {
 		return Promise.resolve(this.doOpenEditor(resource, options));
+	}
+
+	$trySetTrusted(uriComponent: UriComponents, isTrusted: boolean): Promise<boolean> {
+		let uri = URI.revive(uriComponent);
+		return this._notebookService.setTrusted(uri, isTrusted);
 	}
 
 	$tryApplyEdits(id: string, modelVersionId: number, edits: ISingleNotebookEditOperation[], opts: IUndoStopOptions): Promise<boolean> {
@@ -372,7 +384,7 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 		let cell: ICellModel;
 		if (cellUri) {
 			let uriString = URI.revive(cellUri).toString();
-			cell = editor.cells.find(c => c.cellUri.toString() === uriString);
+			cell = find(editor.cells, c => c.cellUri.toString() === uriString);
 			// If it's markdown what should we do? Show notification??
 		} else {
 			// Use the active cell in this case, or 1st cell if there's none active
@@ -394,11 +406,11 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 		let endCell: ICellModel;
 		if (startCellUri) {
 			let uriString = URI.revive(startCellUri).toString();
-			startCell = editor.cells.find(c => c.cellUri.toString() === uriString);
+			startCell = find(editor.cells, c => c.cellUri.toString() === uriString);
 		}
 		if (endCellUri) {
 			let uriString = URI.revive(endCellUri).toString();
-			endCell = editor.cells.find(c => c.cellUri.toString() === uriString);
+			endCell = find(editor.cells, c => c.cellUri.toString() === uriString);
 		}
 		return editor.runAllCells(startCell, endCell);
 	}
@@ -412,7 +424,7 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 		let cell: ICellModel;
 		if (cellUri) {
 			let uriString = URI.revive(cellUri).toString();
-			cell = editor.cells.find(c => c.cellUri.toString() === uriString);
+			cell = find(editor.cells, c => c.cellUri.toString() === uriString);
 			// If it's markdown what should we do? Show notification??
 		} else {
 			// Use the active cell in this case, or 1st cell if there's none active
@@ -452,17 +464,32 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 		};
 		let isUntitled: boolean = uri.scheme === Schemas.untitled;
 
-		const fileInput = isUntitled ? this._untitledEditorService.createOrGet(uri, notebookModeId, options.initialContent) :
-			this._editorService.createInput({ resource: uri, mode: notebookModeId });
-		let input = this._instantiationService.createInstance(NotebookInput, path.basename(uri.fsPath), uri, fileInput);
+		let fileInput: UntitledTextEditorInput | FileEditorInput;
+		if (isUntitled && path.isAbsolute(uri.fsPath)) {
+			const model = this._untitledEditorService.create({ associatedResource: uri, mode: 'notebook', initialValue: options.initialContent });
+			fileInput = this._instantiationService.createInstance(UntitledTextEditorInput, model);
+		} else {
+			if (isUntitled) {
+				const model = this._untitledEditorService.create({ untitledResource: uri, mode: 'notebook', initialValue: options.initialContent });
+				fileInput = this._instantiationService.createInstance(UntitledTextEditorInput, model);
+			} else {
+				fileInput = this._editorService.createEditorInput({ forceFile: true, resource: uri, mode: 'notebook' }) as FileEditorInput;
+			}
+		}
+		let input: NotebookInput;
+		if (isUntitled) {
+			input = this._instantiationService.createInstance(UntitledNotebookInput, path.basename(uri.fsPath), uri, fileInput as UntitledTextEditorInput);
+		} else {
+			input = this._instantiationService.createInstance(FileNotebookInput, path.basename(uri.fsPath), uri, fileInput as FileEditorInput);
+		}
 		input.defaultKernel = options.defaultKernel;
 		input.connectionProfile = new ConnectionProfile(this._capabilitiesService, options.connectionProfile);
 		if (isUntitled) {
-			let untitledModel = await input.textInput.resolve();
+			let untitledModel = await (input as UntitledNotebookInput).textInput.resolve();
 			await untitledModel.load();
 			input.untitledEditorModel = untitledModel;
 			if (options.initialDirtyState === false) {
-				input.untitledEditorModel.setDirty(false);
+				(input.untitledEditorModel as UntitledTextEditorModel).setDirty(false);
 			}
 		}
 		let editor = await this._editorService.openEditor(input, editorOptions, viewColumnToEditorGroup(this._editorGroupService, options.position));
@@ -506,7 +533,7 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 
 		// added editors
 		for (const editor of delta.addedEditors) {
-			const mainThreadEditor = new MainThreadNotebookEditor(editor);
+			const mainThreadEditor = new MainThreadNotebookEditor(editor, this._textFileService);
 
 			this._notebookEditors.set(editor.id, mainThreadEditor);
 			addedEditors.push(mainThreadEditor);
@@ -636,6 +663,7 @@ export class MainThreadNotebookDocumentsAndEditors extends Disposable implements
 				return NotebookChangeKind.ContentUpdated;
 			case NotebookChangeType.KernelChanged:
 			case NotebookChangeType.TrustChanged:
+			case NotebookChangeType.CellMetadataUpdated:
 				return NotebookChangeKind.MetadataUpdated;
 			case NotebookChangeType.Saved:
 				return NotebookChangeKind.Save;

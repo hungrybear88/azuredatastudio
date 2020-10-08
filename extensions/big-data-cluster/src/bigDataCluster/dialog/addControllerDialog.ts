@@ -3,26 +3,21 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as azdata from 'azdata';
-import * as nls from 'vscode-nls';
+import * as vscode from 'vscode';
 import { ClusterController, ControllerError } from '../controller/clusterControllerApi';
 import { ControllerTreeDataProvider } from '../tree/controllerTreeDataProvider';
-import { TreeNode } from '../tree/treeNode';
-import { showErrorMessage } from '../utils';
-import { AuthType } from '../constants';
-
-const localize = nls.loadMessageBundle();
-
-const basicAuthDisplay = localize('basicAuthName', "Basic");
-const integratedAuthDisplay = localize('integratedAuthName', "Windows Authentication");
+import { BdcDashboardOptions } from './bdcDashboardModel';
+import { ControllerNode } from '../tree/controllerTreeNode';
+import { ManageControllerCommand } from '../../commands';
+import * as loc from '../localizedConstants';
+import { AuthType } from 'bdc';
 
 function getAuthCategory(name: AuthType): azdata.CategoryValue {
 	if (name === 'basic') {
-		return { name: name, displayName: basicAuthDisplay };
+		return { name: name, displayName: loc.basic };
 	}
-	return { name: name, displayName: integratedAuthDisplay };
+	return { name: name, displayName: loc.windowsAuth };
 }
 
 export class AddControllerDialogModel {
@@ -31,7 +26,7 @@ export class AddControllerDialogModel {
 	private _authTypes: azdata.CategoryValue[];
 	constructor(
 		public treeDataProvider: ControllerTreeDataProvider,
-		public node?: TreeNode,
+		public node?: ControllerNode,
 		public prefilledUrl?: string,
 		public prefilledAuth?: azdata.CategoryValue,
 		public prefilledUsername?: string,
@@ -62,19 +57,20 @@ export class AddControllerDialogModel {
 			if (auth === 'basic') {
 				// Verify username and password as we can't make them required in the UI
 				if (!username) {
-					throw new Error(localize('err.controller.username.required', "Username is required"));
+					throw new Error(loc.usernameRequired);
 				} else if (!password) {
-					throw new Error(localize('err.controller.password.required', "Password is required"));
+					throw new Error(loc.passwordRequired);
 				}
 			}
 			// We pre-fetch the endpoints here to verify that the information entered is correct (the user is able to connect)
-			let controller = new ClusterController(url, auth, username, password, true);
+			let controller = new ClusterController(url, auth, username, password);
 			let response = await controller.getEndPoints();
 			if (response && response.endPoints) {
 				if (this._canceled) {
 					return;
 				}
-				this.treeDataProvider.addController(url, auth, username, password, rememberPassword);
+				this.treeDataProvider.addOrUpdateController(url, auth, username, password, rememberPassword);
+				vscode.commands.executeCommand(ManageControllerCommand, <BdcDashboardOptions>{ url: url, auth: auth, username: username, password: password });
 				await this.treeDataProvider.saveControllers();
 			}
 		} catch (error) {
@@ -118,13 +114,13 @@ export class AddControllerDialog {
 	}
 
 	private createDialog(): void {
-		this.dialog = azdata.window.createModelViewDialog(localize('textAddNewController', 'Add New Controller'));
+		this.dialog = azdata.window.createModelViewDialog(loc.addNewController);
 		this.dialog.registerContent(async view => {
 			this.uiModelBuilder = view.modelBuilder;
 
 			this.urlInputBox = this.uiModelBuilder.inputBox()
 				.withProperties<azdata.InputBoxProperties>({
-					placeHolder: localize('textUrlLower', 'url'),
+					placeHolder: loc.url.toLocaleLowerCase(),
 					value: this.model.prefilledUrl
 				}).component();
 			this.authDropdown = this.uiModelBuilder.dropDown().withProperties({
@@ -135,19 +131,19 @@ export class AddControllerDialog {
 			this.authDropdown.onValueChanged(e => this.onAuthChanged());
 			this.usernameInputBox = this.uiModelBuilder.inputBox()
 				.withProperties<azdata.InputBoxProperties>({
-					placeHolder: localize('textUsernameLower', 'username'),
+					placeHolder: loc.usernameRequired.toLocaleLowerCase(),
 					value: this.model.prefilledUsername
 				}).component();
 			this.passwordInputBox = this.uiModelBuilder.inputBox()
 				.withProperties<azdata.InputBoxProperties>({
-					placeHolder: localize('textPasswordLower', 'password'),
+					placeHolder: loc.password,
 					inputType: 'password',
 					value: this.model.prefilledPassword
 				})
 				.component();
 			this.rememberPwCheckBox = this.uiModelBuilder.checkBox()
 				.withProperties<azdata.CheckBoxProperties>({
-					label: localize('textRememberPassword', 'Remember Password'),
+					label: loc.rememberPassword,
 					checked: this.model.prefilledRememberPassword
 				}).component();
 
@@ -156,19 +152,19 @@ export class AddControllerDialog {
 					components: [
 						{
 							component: this.urlInputBox,
-							title: localize('textUrlCapital', 'URL'),
+							title: loc.clusterUrl,
 							required: true
 						}, {
 							component: this.authDropdown,
-							title: localize('textAuthCapital', 'Authentication type'),
+							title: loc.authType,
 							required: true
 						}, {
 							component: this.usernameInputBox,
-							title: localize('textUsernameCapital', 'Username'),
+							title: loc.username,
 							required: false
 						}, {
 							component: this.passwordInputBox,
-							title: localize('textPasswordCapital', 'Password'),
+							title: loc.password,
 							required: false
 						}, {
 							component: this.rememberPwCheckBox,
@@ -177,14 +173,15 @@ export class AddControllerDialog {
 					],
 					title: ''
 				}]).withLayout({ width: '100%' }).component();
-
+			this.onAuthChanged();
 			await view.initializeModel(formModel);
+			this.urlInputBox.focus();
 		});
 
 		this.dialog.registerCloseValidator(async () => await this.validate());
 		this.dialog.cancelButton.onClick(async () => await this.cancel());
-		this.dialog.okButton.label = localize('textAdd', 'Add');
-		this.dialog.cancelButton.label = localize('textCancel', 'Cancel');
+		this.dialog.okButton.label = loc.add;
+		this.dialog.cancelButton.label = loc.cancel;
 	}
 
 	private get authValue(): AuthType {

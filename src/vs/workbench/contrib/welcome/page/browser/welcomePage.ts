@@ -24,7 +24,7 @@ import { Schemas } from 'vs/base/common/network';
 import { IBackupFileService } from 'vs/workbench/services/backup/common/backup';
 import { getInstalledExtensions, IExtensionStatus, onExtensionChanged, isKeymapExtension } from 'vs/workbench/contrib/extensions/common/extensionsUtils';
 import { IExtensionManagementService, IExtensionGalleryService, ILocalExtension } from 'vs/platform/extensionManagement/common/extensionManagement';
-import { IExtensionEnablementService, EnablementState, IExtensionTipsService } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
+import { IWorkbenchExtensionEnablementService, EnablementState, IExtensionRecommendationsService } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
 import { ILifecycleService, StartupKind } from 'vs/platform/lifecycle/common/lifecycle';
 import { Disposable } from 'vs/base/common/lifecycle';
 import { splitName } from 'vs/base/common/labels';
@@ -42,9 +42,11 @@ import { ExtensionType } from 'vs/platform/extensions/common/extensions';
 import { joinPath } from 'vs/base/common/resources';
 import { IRecentlyOpened, isRecentWorkspace, IRecentWorkspace, IRecentFolder, isRecentFolder, IWorkspacesService } from 'vs/platform/workspaces/common/workspaces';
 import { CancellationToken } from 'vs/base/common/cancellation';
-import { IEnvironmentService } from 'vs/platform/environment/common/environment'; // {{SQL CARBON EDIT}}
-import { setProductQuality } from 'sql/workbench/contrib/welcome/page/browser/az_data_welcome_page'; // {{SQL CARBON EDIT}}
+import 'sql/workbench/contrib/welcome2/page/browser/az_data_welcome_page'; // {{SQL CARBON EDIT}}
 import { IHostService } from 'vs/workbench/services/host/browser/host';
+import { IProductService } from 'vs/platform/product/common/productService';
+import { IEditorOptions } from 'vs/platform/editor/common/editor';
+import { IWorkbenchLayoutService } from 'vs/workbench/services/layout/browser/layoutService';
 
 const configurationKey = 'workbench.startupEditor';
 const oldConfigurationKey = 'workbench.welcome.enabled';
@@ -60,13 +62,14 @@ export class WelcomePageContribution implements IWorkbenchContribution {
 		@IFileService fileService: IFileService,
 		@IWorkspaceContextService contextService: IWorkspaceContextService,
 		@ILifecycleService lifecycleService: ILifecycleService,
+		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@ICommandService private readonly commandService: ICommandService,
 	) {
 		const enabled = isWelcomePageEnabled(configurationService, contextService);
 		if (enabled && lifecycleService.startupKind !== StartupKind.ReloadedWindow) {
 			backupFileService.hasBackups().then(hasBackups => {
-				const activeEditor = editorService.activeEditor;
-				if (!activeEditor && !hasBackups) {
+				// Open the welcome even if we opened a set of default editors
+				if ((!editorService.activeEditor || layoutService.openedDefaultEditors) && !hasBackups) {
 					const openWithReadme = configurationService.getValue(configurationKey) === 'readme';
 					if (openWithReadme) {
 						return Promise.all(contextService.getWorkspace().folders.map(folder => {
@@ -98,7 +101,18 @@ export class WelcomePageContribution implements IWorkbenchContribution {
 								return undefined;
 							});
 					} else {
-						return instantiationService.createInstance(WelcomePage).openEditor();
+						let options: IEditorOptions;
+						let editor = editorService.activeEditor;
+						if (editor) {
+							// Ensure that the welcome editor won't get opened more than once
+							if (editor.getTypeId() === welcomeInputTypeId || editorService.editors.some(e => e.getTypeId() === welcomeInputTypeId)) {
+								return undefined;
+							}
+							options = { pinned: false, index: 0 };
+						} else {
+							options = { pinned: false };
+						}
+						return instantiationService.createInstance(WelcomePage).openEditor(options);
 					}
 				}
 				return undefined;
@@ -109,7 +123,7 @@ export class WelcomePageContribution implements IWorkbenchContribution {
 
 function isWelcomePageEnabled(configurationService: IConfigurationService, contextService: IWorkspaceContextService) {
 	const startupEditor = configurationService.inspect(configurationKey);
-	if (!startupEditor.user && !startupEditor.workspace) {
+	if (!startupEditor.userValue && !startupEditor.workspaceValue) {
 		const welcomeEnabled = configurationService.inspect(oldConfigurationKey);
 		if (welcomeEnabled.value !== undefined && welcomeEnabled.value !== null) {
 			return welcomeEnabled.value;
@@ -148,7 +162,6 @@ interface ExtensionSuggestion {
 
 const extensionPacks: ExtensionSuggestion[] = [
 	{ name: localize('welcomePage.javaScript', "JavaScript"), id: 'dbaeumer.vscode-eslint' },
-	{ name: localize('welcomePage.typeScript', "TypeScript"), id: 'ms-vscode.vscode-typescript-tslint-plugin' },
 	{ name: localize('welcomePage.python', "Python"), id: 'ms-python.python' },
 	// { name: localize('welcomePage.go', "Go"), id: 'lukehoban.go' },
 	{ name: localize('welcomePage.php', "PHP"), id: 'felixfbecker.php-pack' },
@@ -259,15 +272,16 @@ class WelcomePage extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILabelService private readonly labelService: ILabelService,
 		@INotificationService private readonly notificationService: INotificationService,
-		@IExtensionEnablementService private readonly extensionEnablementService: IExtensionEnablementService,
+		@IWorkbenchExtensionEnablementService private readonly extensionEnablementService: IWorkbenchExtensionEnablementService,
 		@IExtensionGalleryService private readonly extensionGalleryService: IExtensionGalleryService,
 		@IExtensionManagementService private readonly extensionManagementService: IExtensionManagementService,
-		@IExtensionTipsService private readonly tipsService: IExtensionTipsService,
+		@IExtensionRecommendationsService private readonly tipsService: IExtensionRecommendationsService,
 		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
 		@ILifecycleService lifecycleService: ILifecycleService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IEnvironmentService private readonly environmentService: IEnvironmentService, // {{SQL CARBON EDIT}}
-		@IHostService private readonly hostService: IHostService
+		@IHostService private readonly hostService: IHostService,
+		@IProductService private readonly productService: IProductService,
+
 	) {
 		super();
 		this._register(lifecycleService.onShutdown(() => this.dispose()));
@@ -275,11 +289,10 @@ class WelcomePage extends Disposable {
 		const recentlyOpened = this.workspacesService.getRecentlyOpened();
 		const installedExtensions = this.instantiationService.invokeFunction(getInstalledExtensions);
 		// {{SQL CARBON EDIT}} - Redirect to ADS welcome page
-		setProductQuality(this.environmentService.appQuality);
 		const resource = URI.parse(require.toUrl('./az_data_welcome_page'))
 			.with({
 				scheme: Schemas.walkThrough,
-				query: JSON.stringify({ moduleId: 'sql/workbench/contrib/welcome/page/browser/az_data_welcome_page' })
+				query: JSON.stringify({ moduleId: 'sql/workbench/contrib/welcome2/page/browser/az_data_welcome_page' })
 			});
 		this.editorInput = this.instantiationService.createInstance(WalkThroughInput, {
 			typeId: welcomeInputTypeId,
@@ -290,8 +303,8 @@ class WelcomePage extends Disposable {
 		});
 	}
 
-	public openEditor() {
-		return this.editorService.openEditor(this.editorInput, { pinned: false });
+	public openEditor(options: IEditorOptions = { pinned: false }) {
+		return this.editorService.openEditor(this.editorInput, options);
 	}
 
 	private onReady(container: HTMLElement, recentlyOpened: Promise<IRecentlyOpened>, installedExtensions: Promise<IExtensionStatus[]>): void {
@@ -304,11 +317,16 @@ class WelcomePage extends Disposable {
 			this.configurationService.updateValue(configurationKey, showOnStartup.checked ? 'welcomePage' : 'newUntitledFile', ConfigurationTarget.USER);
 		});
 
+		const prodName = container.querySelector('.welcomePage2 .title .caption') as HTMLElement;
+		if (prodName) {
+			prodName.innerHTML = this.productService.nameLong;
+		}
+
 		recentlyOpened.then(({ workspaces }) => {
 			// Filter out the current workspace
 			workspaces = workspaces.filter(recent => !this.contextService.isCurrentWorkspace(isRecentWorkspace(recent) ? recent.workspace : recent.folderUri));
 			if (!workspaces.length) {
-				const recent = container.querySelector('.welcomePage') as HTMLElement;
+				const recent = container.querySelector('.welcomePage2') as HTMLElement;
 				recent.classList.add('emptyRecent');
 				return;
 			}
@@ -521,15 +539,13 @@ class WelcomePage extends Disposable {
 									"WelcomePageInstalled-4" : {
 										"from" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
 										"extensionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
-										"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
-										"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth" }
+										"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 									}
 								*/
 								this.telemetryService.publicLog(strings.installedEvent, {
 									from: telemetryFrom,
 									extensionId: extensionSuggestion.id,
 									outcome: isPromiseCanceledError(err) ? 'canceled' : 'error',
-									error: String(err),
 								});
 								this.notificationService.error(err);
 							});
@@ -558,15 +574,13 @@ class WelcomePage extends Disposable {
 				"WelcomePageInstalled-6" : {
 					"from" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
 					"extensionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
-					"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
-					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth" }
+					"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 				}
 			*/
 			this.telemetryService.publicLog(strings.installedEvent, {
 				from: telemetryFrom,
 				extensionId: extensionSuggestion.id,
 				outcome: isPromiseCanceledError(err) ? 'canceled' : 'error',
-				error: String(err),
 			});
 			this.notificationService.error(err);
 		});
@@ -598,6 +612,10 @@ export class WelcomeInputFactory implements IEditorInputFactory {
 
 	static readonly ID = welcomeInputTypeId;
 
+	public canSerialize(editorInput: EditorInput): boolean {
+		return true;
+	}
+
 	public serialize(editorInput: EditorInput): string {
 		return '{}';
 	}
@@ -621,39 +639,39 @@ registerThemingParticipant((theme, collector) => {
 	}
 	const foregroundColor = theme.getColor(foreground);
 	if (foregroundColor) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .caption { color: ${foregroundColor}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .caption { color: ${foregroundColor}; }`);
 	}
 	const descriptionColor = theme.getColor(descriptionForeground);
 	if (descriptionColor) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .detail { color: ${descriptionColor}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .detail { color: ${descriptionColor}; }`);
 	}
 	const buttonColor = getExtraColor(theme, buttonBackground, { dark: 'rgba(0, 0, 0, .2)', extra_dark: 'rgba(200, 235, 255, .042)', light: 'rgba(0,0,0,.04)', hc: 'black' });
 	if (buttonColor) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .commands .item button { background: ${buttonColor}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .commands .item button { background: ${buttonColor}; }`);
 	}
 	const buttonHoverColor = getExtraColor(theme, buttonHoverBackground, { dark: 'rgba(200, 235, 255, .072)', extra_dark: 'rgba(200, 235, 255, .072)', light: 'rgba(0,0,0,.10)', hc: null });
 	if (buttonHoverColor) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .commands .item button:hover { background: ${buttonHoverColor}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .commands .item button:hover { background: ${buttonHoverColor}; }`);
 	}
 	const link = theme.getColor(textLinkForeground);
 	if (link) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage a { color: ${link}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 a { color: ${link}; }`);
 	}
 	const activeLink = theme.getColor(textLinkActiveForeground);
 	if (activeLink) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage a:hover,
-			.monaco-workbench .part.editor > .content .welcomePage a:active { color: ${activeLink}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 a:hover,
+			.monaco-workbench .part.editor > .content .welcomePage2 a:active { color: ${activeLink}; }`);
 	}
 	const focusColor = theme.getColor(focusBorder);
 	if (focusColor) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage a:focus { outline-color: ${focusColor}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 a:focus { outline-color: ${focusColor}; }`);
 	}
 	const border = theme.getColor(contrastBorder);
 	if (border) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .commands .item button { border-color: ${border}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .commands .item button { border-color: ${border}; }`);
 	}
 	const activeBorder = theme.getColor(activeContrastBorder);
 	if (activeBorder) {
-		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage .commands .item button:hover { outline-color: ${activeBorder}; }`);
+		collector.addRule(`.monaco-workbench .part.editor > .content .welcomePage2 .commands .item button:hover { outline-color: ${activeBorder}; }`);
 	}
 });

@@ -3,10 +3,10 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { nb, QueryExecuteSubsetResult, IDbColumn, BatchSummary, IResultMessage, ResultSetSummary } from 'azdata';
+import { nb, IResultMessage } from 'azdata';
 import { localize } from 'vs/nls';
-import { FutureInternal, notebookConstants } from 'sql/workbench/parts/notebook/browser/models/modelInterfaces';
-import QueryRunner from 'sql/platform/query/common/queryRunner';
+import QueryRunner from 'sql/workbench/services/query/common/queryRunner';
+import { BatchSummary, ResultSetSummary, IColumn, ResultSetSubset } from 'sql/workbench/services/query/common/query';
 import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import Severity from 'vs/base/common/severity';
@@ -16,20 +16,25 @@ import { IErrorMessageService } from 'sql/platform/errorMessage/common/errorMess
 import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
 import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { escape } from 'sql/base/common/strings';
-import * as notebookUtils from 'sql/workbench/parts/notebook/browser/models/notebookUtils';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { ICapabilitiesService } from 'sql/platform/capabilities/common/capabilitiesService';
 import { ILogService } from 'vs/platform/log/common/log';
 import { isUndefinedOrNull } from 'vs/base/common/types';
 import { ILanguageMagic } from 'sql/workbench/services/notebook/browser/notebookService';
-import { ITextResourcePropertiesService } from 'vs/editor/common/services/resourceConfiguration';
+import { ITextResourcePropertiesService } from 'vs/editor/common/services/textResourceConfigurationService';
 import { URI } from 'vs/base/common/uri';
 import { getUriPrefix, uriPrefixes } from 'sql/platform/connection/common/utils';
+import { firstIndex } from 'vs/base/common/arrays';
+import { startsWith } from 'vs/base/common/strings';
+import { onUnexpectedError } from 'vs/base/common/errors';
+import { FutureInternal, notebookConstants } from 'sql/workbench/services/notebook/browser/interfaces';
+import { tryMatchCellMagic } from 'sql/workbench/services/notebook/browser/utils';
 
 export const sqlKernelError: string = localize("sqlKernelError", "SQL kernel error");
 export const MAX_ROWS = 5000;
 export const NotebookConfigSectionName = 'notebook';
 export const MaxTableRowsConfigName = 'maxTableRows';
+export const SqlStopOnErrorConfigName = 'sqlStopOnError';
 
 const languageMagics: ILanguageMagic[] = [{
 	language: 'Python',
@@ -70,7 +75,7 @@ export class SqlSessionManager implements nb.SessionManager {
 
 	startNew(options: nb.ISessionOptions): Thenable<nb.ISession> {
 		let sqlSession = new SqlSession(options, this._instantiationService);
-		let index = SqlSessionManager._sessions.findIndex(session => session.path === options.path);
+		let index = firstIndex(SqlSessionManager._sessions, session => session.path === options.path);
 		if (index > -1) {
 			SqlSessionManager._sessions.splice(index);
 		}
@@ -79,7 +84,7 @@ export class SqlSessionManager implements nb.SessionManager {
 	}
 
 	shutdown(id: string): Thenable<void> {
-		let index = SqlSessionManager._sessions.findIndex(session => session.id === id);
+		let index = firstIndex(SqlSessionManager._sessions, session => session.id === id);
 		if (index > -1) {
 			let sessionManager = SqlSessionManager._sessions[index];
 			SqlSessionManager._sessions.splice(index);
@@ -95,7 +100,6 @@ export class SqlSessionManager implements nb.SessionManager {
 export class SqlSession implements nb.ISession {
 	private _kernel: SqlKernel;
 	private _defaultKernelLoaded = false;
-	private _currentConnection: IConnectionProfile;
 
 	public set defaultKernelLoaded(value) {
 		this._defaultKernelLoaded = value;
@@ -274,15 +278,15 @@ class SqlKernel extends Disposable implements nb.IKernel {
 			if (this._future && !this._queryRunner.hasCompleted) {
 				this._queryRunner.cancelQuery().then(ok => undefined, error => this._errorMessageService.showDialog(Severity.Error, sqlKernelError, error));
 				// TODO when we can just show error as an output, should show an "execution canceled" error in output
-				this._future.handleDone();
+				this._future.handleDone().catch(err => onUnexpectedError(err));
 			}
-			this._queryRunner.runQuery(code);
+			this._queryRunner.runQuery(code).catch(err => onUnexpectedError(err));
 		} else if (this._currentConnection && this._currentConnectionProfile) {
 			this._queryRunner = this._instantiationService.createInstance(QueryRunner, this._connectionPath);
 			this._connectionManagementService.connect(this._currentConnectionProfile, this._connectionPath).then((result) => {
 				this.addQueryEventListeners(this._queryRunner);
-				this._queryRunner.runQuery(code);
-			});
+				this._queryRunner.runQuery(code).catch(err => onUnexpectedError(err));
+			}).catch(err => onUnexpectedError(err));
 		} else {
 			canRun = false;
 		}
@@ -294,7 +298,7 @@ class SqlKernel extends Disposable implements nb.IKernel {
 		this._future = new SQLFuture(this._queryRunner, count, this._configurationService, this.logService);
 		if (!canRun) {
 			// Complete early
-			this._future.handleDone(new Error(localize('connectionRequired', "A connection must be chosen to run notebook cells")));
+			this._future.handleDone(new Error(localize('connectionRequired', "A connection must be chosen to run notebook cells"))).catch(err => onUnexpectedError(err));
 		}
 
 		// TODO should we  cleanup old future? I don't think we need to
@@ -305,11 +309,11 @@ class SqlKernel extends Disposable implements nb.IKernel {
 		let code = Array.isArray(content.code) ? content.code.join('') : content.code;
 		let firstLineEnd = code.indexOf(this.textResourcePropertiesService.getEOL(URI.file(this._path)));
 		let firstLine = code.substring(0, (firstLineEnd >= 0) ? firstLineEnd : 0).trimLeft();
-		if (firstLine.startsWith('%%')) {
+		if (startsWith(firstLine, '%%')) {
 			// Strip out the line
 			code = code.substring(firstLineEnd, code.length);
 			// Try and match to an external script magic. If we add more magics later, should handle transforms better
-			let magic = notebookUtils.tryMatchCellMagic(firstLine);
+			let magic = tryMatchCellMagic(firstLine);
 			if (magic) {
 				let executor = this._magicToExecutorMap.get(magic.toLowerCase());
 				if (executor) {
@@ -337,10 +341,12 @@ class SqlKernel extends Disposable implements nb.IKernel {
 				this._errorMessageService.showDialog(Severity.Error, sqlKernelError, error);
 			});
 		}));
-		this._register(queryRunner.onMessage(message => {
+		this._register(queryRunner.onMessage(messages => {
 			// TODO handle showing a messages output (should be updated with all messages, only changing 1 output in total)
-			if (this._future && isUndefinedOrNull(message.selection)) {
-				this._future.handleMessage(message);
+			for (const message of messages) {
+				if (this._future && isUndefinedOrNull(message.range)) {
+					this._future.handleMessage(message);
+				}
 			}
 		}));
 		this._register(queryRunner.onBatchEnd(batch => {
@@ -352,7 +358,7 @@ class SqlKernel extends Disposable implements nb.IKernel {
 
 	private async queryComplete(): Promise<void> {
 		if (this._future) {
-			this._future.handleDone();
+			await this._future.handleDone();
 		}
 		// TODO issue #2746 should ideally show a warning inside the dialog if have no data
 	}
@@ -378,6 +384,9 @@ export class SQLFuture extends Disposable implements FutureInternal {
 	private doneDeferred = new Deferred<nb.IShellMessage>();
 	private configuredMaxRows: number = MAX_ROWS;
 	private _outputAddedPromises: Promise<void>[] = [];
+	private _querySubsetResultMap: Map<number, ResultSetSubset> = new Map<number, ResultSetSubset>();
+	private _errorOccurred: boolean = false;
+	private _stopOnError: boolean = true;
 	constructor(
 		private _queryRunner: QueryRunner,
 		private _executionCount: number | undefined,
@@ -391,6 +400,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 			if (maxRows && maxRows > 0) {
 				this.configuredMaxRows = maxRows;
 			}
+			this._stopOnError = !!config[SqlStopOnErrorConfigName];
 		}
 	}
 
@@ -399,7 +409,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 	}
 	set inProgress(val: boolean) {
 		if (this._queryRunner && !val) {
-			this._queryRunner.cancelQuery();
+			this._queryRunner.cancelQuery().catch(err => onUnexpectedError(err));
 		}
 	}
 	get msg(): nb.IMessage {
@@ -410,12 +420,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 		return this.doneDeferred.promise;
 	}
 
-	public handleDone(err?: Error): void {
-		this.handleDoneAsync(err);
-		// TODO we should reject where some failure happened?
-	}
-
-	private async handleDoneAsync(err?: Error): Promise<void> {
+	public async handleDone(err?: Error): Promise<void> {
 		// must wait on all outstanding output updates to complete
 		if (this._outputAddedPromises && this._outputAddedPromises.length > 0) {
 			// Do not care about error handling as this is handled elsewhere
@@ -425,7 +430,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 			channel: 'shell',
 			type: 'execute_reply',
 			content: {
-				status: 'ok',
+				status: this._errorOccurred && this._stopOnError ? 'error' : 'ok',
 				execution_count: this._executionCount
 			},
 			header: undefined,
@@ -437,6 +442,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 			this.doneHandler.handle(msg);
 		}
 		this.doneDeferred.resolve(msg);
+		this._querySubsetResultMap.clear();
 	}
 
 	sendInputReply(content: nb.IInputReply): void {
@@ -475,12 +481,20 @@ export class SQLFuture extends Disposable implements FutureInternal {
 
 	private async processResultSets(batch: BatchSummary): Promise<void> {
 		try {
+			let queryRowsPromises: Promise<void>[] = [];
 			for (let resultSet of batch.resultSetSummaries) {
 				let rowCount = resultSet.rowCount > this.configuredMaxRows ? this.configuredMaxRows : resultSet.rowCount;
 				if (rowCount === this.configuredMaxRows) {
 					this.handleMessage(localize('sqlMaxRowsDisplayed', "Displaying Top {0} rows.", rowCount));
 				}
-				await this.sendResultSetAsIOPub(rowCount, resultSet);
+				queryRowsPromises.push(this.getAllQueryRows(rowCount, resultSet));
+			}
+			// We want to display table in the same order
+			let i = 0;
+			for (let resultSet of batch.resultSetSummaries) {
+				await queryRowsPromises[i];
+				this.sendResultSetAsIOPub(resultSet);
+				i++;
 			}
 		} catch (err) {
 			// TODO should we output this somewhere else?
@@ -488,13 +502,31 @@ export class SQLFuture extends Disposable implements FutureInternal {
 		}
 	}
 
-	private async sendResultSetAsIOPub(rowCount: number, resultSet: ResultSetSummary): Promise<void> {
-		let subsetResult: QueryExecuteSubsetResult;
+	private async getAllQueryRows(rowCount: number, resultSet: ResultSetSummary): Promise<void> {
+		let deferred: Deferred<void> = new Deferred<void>();
 		if (rowCount > 0) {
-			subsetResult = await this._queryRunner.getQueryRows(0, rowCount, resultSet.batchId, resultSet.id);
+			this._queryRunner.getQueryRows(0, rowCount, resultSet.batchId, resultSet.id).then((result) => {
+				this._querySubsetResultMap.set(resultSet.id, result);
+				deferred.resolve();
+			}, (err) => {
+				this._querySubsetResultMap.set(resultSet.id, { rowCount: 0, rows: [] });
+				deferred.reject(err);
+			});
 		} else {
-			subsetResult = { message: '', resultSubset: { rowCount: 0, rows: [] } };
+			this._querySubsetResultMap.set(resultSet.id, { rowCount: 0, rows: [] });
+			deferred.resolve();
 		}
+		return deferred;
+	}
+
+	private sendResultSetAsIOPub(resultSet: ResultSetSummary): void {
+		if (this._querySubsetResultMap && this._querySubsetResultMap.get(resultSet.id)) {
+			let subsetResult = this._querySubsetResultMap.get(resultSet.id);
+			this.sendIOPubMessage(subsetResult, resultSet);
+		}
+	}
+
+	private sendIOPubMessage(subsetResult: ResultSetSubset, resultSet: ResultSetSummary): void {
 		let msg: nb.IIOPubMessage = {
 			channel: 'iopub',
 			type: 'iopub',
@@ -515,6 +547,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 			parent_header: undefined
 		};
 		this.ioHandler.handle(msg);
+		this._querySubsetResultMap.delete(resultSet.id);
 	}
 
 	setIOPubHandler(handler: nb.MessageHandler<nb.IIOPubMessage>): void {
@@ -528,7 +561,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 		// no-op
 	}
 
-	private convertToDataResource(columns: IDbColumn[], subsetResult: QueryExecuteSubsetResult): IDataResource {
+	private convertToDataResource(columns: IColumn[], subsetResult: ResultSetSubset): IDataResource {
 		let columnsResources: IDataResourceSchema[] = [];
 		columns.forEach(column => {
 			columnsResources.push({ name: escape(column.columnName) });
@@ -537,7 +570,7 @@ export class SQLFuture extends Disposable implements FutureInternal {
 		columnsFields.fields = columnsResources;
 		return {
 			schema: columnsFields,
-			data: subsetResult.resultSubset.rows.map(row => {
+			data: subsetResult.rows.map(row => {
 				let rowObject: { [key: string]: any; } = {};
 				row.forEach((val, index) => {
 					rowObject[index] = val.displayValue;
@@ -547,24 +580,30 @@ export class SQLFuture extends Disposable implements FutureInternal {
 		};
 	}
 
-	private convertToHtmlTable(columns: IDbColumn[], d: QueryExecuteSubsetResult): string {
-		let htmlString = '<table>';
+	private convertToHtmlTable(columns: IColumn[], d: ResultSetSubset): string[] {
+		// Adding 3 for <table>, column title rows, </table>
+		let htmlStringArr: string[] = new Array(d.rowCount + 3);
+		htmlStringArr[0] = '<table>';
 		if (columns.length > 0) {
-			htmlString += '<tr>';
+			let columnHeaders = '<tr>';
 			for (let column of columns) {
-				htmlString += '<th>' + escape(column.columnName) + '</th>';
+				columnHeaders += `<th>${escape(column.columnName)}</th>`;
 			}
-			htmlString += '</tr>';
+			columnHeaders += '</tr>';
+			htmlStringArr[1] = columnHeaders;
 		}
-		for (const row of d.resultSubset.rows) {
-			htmlString += '<tr>';
-			for (let i = 0; i < columns.length; i++) {
-				htmlString += '<td>' + escape(row[i].displayValue) + '</td>';
+		let i = 2;
+		for (const row of d.rows) {
+			let rowData = '<tr>';
+			for (let columnIndex = 0; columnIndex < columns.length; columnIndex++) {
+				rowData += `<td>${escape(row[columnIndex].displayValue)}</td>`;
 			}
-			htmlString += '</tr>';
+			rowData += '</tr>';
+			htmlStringArr[i] = rowData;
+			i++;
 		}
-		htmlString += '</table>';
-		return htmlString;
+		htmlStringArr[htmlStringArr.length - 1] = '</table>';
+		return htmlStringArr;
 	}
 
 	private convertToDisplayMessage(msg: IResultMessage | string): nb.IIOPubMessage {
@@ -590,6 +629,8 @@ export class SQLFuture extends Disposable implements FutureInternal {
 	}
 
 	private convertToError(msg: IResultMessage | string): nb.IIOPubMessage {
+		this._errorOccurred = true;
+
 		if (msg) {
 			let msgData = typeof msg === 'string' ? msg : msg.message;
 			return {

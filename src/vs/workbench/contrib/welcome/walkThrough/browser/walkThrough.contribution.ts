@@ -13,14 +13,14 @@ import { Registry } from 'vs/platform/registry/common/platform';
 import { Extensions as EditorInputExtensions, IEditorInputFactoryRegistry } from 'vs/workbench/common/editor';
 import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
 import { IWorkbenchActionRegistry, Extensions } from 'vs/workbench/common/actions';
-import { SyncActionDescriptor, MenuRegistry, MenuId } from 'vs/platform/actions/common/actions';
+import { SyncActionDescriptor, /*MenuRegistry, MenuId*/ } from 'vs/platform/actions/common/actions';
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from 'vs/workbench/common/contributions';
 import { IEditorRegistry, Extensions as EditorExtensions, EditorDescriptor } from 'vs/workbench/browser/editor';
 import { LifecyclePhase } from 'vs/platform/lifecycle/common/lifecycle';
 import { KeybindingsRegistry } from 'vs/platform/keybinding/common/keybindingsRegistry';
 
 Registry.as<IEditorRegistry>(EditorExtensions.Editors)
-	.registerEditor(new EditorDescriptor(
+	.registerEditor(EditorDescriptor.create(
 		WalkThroughPart,
 		WalkThroughPart.ID,
 		localize('walkThrough.editor.label', "Interactive Playground"),
@@ -29,7 +29,7 @@ Registry.as<IEditorRegistry>(EditorExtensions.Editors)
 
 Registry.as<IWorkbenchActionRegistry>(Extensions.WorkbenchActions)
 	.registerWorkbenchAction(
-		new SyncActionDescriptor(EditorWalkThroughAction, EditorWalkThroughAction.ID, EditorWalkThroughAction.LABEL),
+		SyncActionDescriptor.from(EditorWalkThroughAction),
 		'Help: Interactive Playground', localize('help', "Help"));
 
 Registry.as<IEditorInputFactoryRegistry>(EditorInputExtensions.EditorInputFactories).registerEditorInputFactory(EditorWalkThroughInputFactory.ID, EditorWalkThroughInputFactory);

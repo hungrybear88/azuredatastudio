@@ -14,7 +14,6 @@ import * as Constants from 'sql/platform/connection/common/constants';
 import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { ICapabilitiesService } from 'sql/platform/capabilities/common/capabilitiesService';
 import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
-import { entries } from 'sql/base/common/objects';
 import { Deferred } from 'sql/base/common/promise';
 import { IErrorMessageService } from 'sql/platform/errorMessage/common/errorMessageService';
 import { IConnectionDialogService } from 'sql/workbench/services/connection/common/connectionDialogService';
@@ -28,8 +27,11 @@ import * as types from 'vs/base/common/types';
 import { trim } from 'vs/base/common/strings';
 import { localize } from 'vs/nls';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
-import { IWorkbenchLayoutService } from 'vs/workbench/services/layout/browser/layoutService';
 import { CmsConnectionController } from 'sql/workbench/services/connection/browser/cmsConnectionController';
+import { entries } from 'sql/base/common/collections';
+import { find } from 'vs/base/common/arrays';
+import { onUnexpectedError } from 'vs/base/common/errors';
+import { ILogService } from 'vs/platform/log/common/log';
 
 export interface IConnectionValidateResult {
 	isValid: boolean;
@@ -42,6 +44,7 @@ export interface IConnectionComponentCallbacks {
 	onAdvancedProperties?: () => void;
 	onSetAzureTimeOut?: () => void;
 	onFetchDatabases?: (serverName: string, authenticationType: string, userName?: string, password?: string) => Promise<string[]>;
+	onAzureTenantSelection?: (azureTenantId?: string) => void;
 }
 
 export interface IConnectionComponentController {
@@ -80,13 +83,13 @@ export class ConnectionDialogService implements IConnectionDialogService {
 	private _connectionManagementService: IConnectionManagementService;
 
 	constructor(
-		@IWorkbenchLayoutService private layoutService: IWorkbenchLayoutService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
 		@ICapabilitiesService private _capabilitiesService: ICapabilitiesService,
 		@IErrorMessageService private _errorMessageService: IErrorMessageService,
 		@IConfigurationService private _configurationService: IConfigurationService,
 		@IClipboardService private _clipboardService: IClipboardService,
-		@ICommandService private _commandService: ICommandService
+		@ICommandService private _commandService: ICommandService,
+		@ILogService private _logService: ILogService,
 	) {
 		this.initializeConnectionProviders();
 	}
@@ -136,7 +139,7 @@ export class ConnectionDialogService implements IConnectionDialogService {
 			if (keys && keys.length > 0) {
 				if (this._params && this._params.providers && this._params.providers.length > 0) {
 					//Filter providers from master keys.
-					filteredKeys = keys.filter(key => this._params.providers.includes(key));
+					filteredKeys = keys.filter(key => this._params.providers.some(x => x === key));
 				}
 				if (filteredKeys && filteredKeys.length > 0) {
 					defaultProvider = filteredKeys[0];
@@ -163,6 +166,10 @@ export class ConnectionDialogService implements IConnectionDialogService {
 				}
 				profile = result.connection;
 
+				if (params.oldProfileId && params.isEditConnection) {
+					profile.id = params.oldProfileId;
+				}
+
 				profile.serverName = trim(profile.serverName);
 
 				// append the port to the server name for SQL Server connections
@@ -182,12 +189,12 @@ export class ConnectionDialogService implements IConnectionDialogService {
 					profile.savePassword = true;
 				}
 
-				this.handleDefaultOnConnect(params, profile);
+				this.handleDefaultOnConnect(params, profile).catch(err => onUnexpectedError(err));
 			} else {
 				profile.serverName = trim(profile.serverName);
-				this._connectionManagementService.addSavedPassword(profile).then(connectionWithPassword => {
-					this.handleDefaultOnConnect(params, connectionWithPassword);
-				});
+				this._connectionManagementService.addSavedPassword(profile).then(async (connectionWithPassword) => {
+					await this.handleDefaultOnConnect(params, connectionWithPassword);
+				}).catch(err => onUnexpectedError(err));
 			}
 		}
 	}
@@ -220,14 +227,14 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		}
 	}
 
-	private handleDefaultOnConnect(params: INewConnectionParams, connection: IConnectionProfile): Thenable<void> {
+	private async handleDefaultOnConnect(params: INewConnectionParams, connection: IConnectionProfile): Promise<void> {
 		if (this.ignoreNextConnect) {
 			this._connectionDialog.resetConnection();
 			this._connectionDialog.close();
 			this.ignoreNextConnect = false;
 			this._connecting = false;
 			this._dialogDeferredPromise.resolve(connection);
-			return Promise.resolve();
+			return;
 		}
 		let fromEditor = params && params.connectionType === ConnectionType.editor;
 		let isTemporaryConnection = params && params.connectionType === ConnectionType.temporary;
@@ -243,7 +250,8 @@ export class ConnectionDialogService implements IConnectionDialogService {
 			showFirewallRuleOnError: true
 		};
 
-		return this._connectionManagementService.connectAndSaveProfile(connection, uri, options, params && params.input).then(connectionResult => {
+		try {
+			const connectionResult = await this._connectionManagementService.connectAndSaveProfile(connection, uri, options, params && params.input);
 			this._connecting = false;
 			if (connectionResult && connectionResult.connected) {
 				this._connectionDialog.close();
@@ -256,11 +264,11 @@ export class ConnectionDialogService implements IConnectionDialogService {
 				this._connectionDialog.resetConnection();
 				this.showErrorDialog(Severity.Error, this._connectionErrorTitle, connectionResult.errorMessage, connectionResult.callStack);
 			}
-		}).catch(err => {
+		} catch (err) {
 			this._connecting = false;
 			this._connectionDialog.resetConnection();
 			this.showErrorDialog(Severity.Error, this._connectionErrorTitle, err);
-		});
+		}
 	}
 
 	private get uiController(): IConnectionComponentController {
@@ -307,10 +315,8 @@ export class ConnectionDialogService implements IConnectionDialogService {
 				});
 			}
 			if (!isProviderInParams) {
-				this._currentProviderType = Object.keys(this._providerNameToDisplayNameMap).find((key) =>
-					this._providerNameToDisplayNameMap[key] === input.selectedProviderDisplayName &&
-					key !== Constants.cmsProviderName
-				);
+				let uniqueProvidersMap = this._connectionManagementService.getUniqueConnectionProvidersByNameMap(this._providerNameToDisplayNameMap);
+				this._currentProviderType = find(Object.keys(uniqueProvidersMap), (key) => uniqueProvidersMap[key] === input.selectedProviderDisplayName);
 			}
 		}
 		this._model.providerName = this._currentProviderType;
@@ -340,7 +346,7 @@ export class ConnectionDialogService implements IConnectionDialogService {
 			this._model = this.createModel(connectionWithPassword);
 
 			this.uiController.fillInConnectionInputs(this._model);
-		});
+		}).catch(err => onUnexpectedError(err));
 		this._connectionDialog.updateProvider(this._providerNameToDisplayNameMap[connectionInfo.providerName]);
 	}
 
@@ -382,12 +388,9 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		return newProfile;
 	}
 
-	private showDialogWithModel(): Promise<void> {
-		return new Promise<void>((resolve, reject) => {
-			this.updateModelServerCapabilities(this._inputModel);
-			this.doShowDialog(this._params);
-			resolve(null);
-		});
+	private async showDialogWithModel(): Promise<void> {
+		this.updateModelServerCapabilities(this._inputModel);
+		await this.doShowDialog(this._params);
 	}
 
 	public openDialogAndWait(
@@ -411,35 +414,35 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		return this._dialogDeferredPromise.promise;
 	}
 
-	public showDialog(
+	public async showDialog(
 		connectionManagementService: IConnectionManagementService,
 		params?: INewConnectionParams,
 		model?: IConnectionProfile,
 		connectionResult?: IConnectionResult,
-		connectionOptions?: IConnectionCompletionOptions): Promise<void> {
+		connectionOptions?: IConnectionCompletionOptions,
+	): Promise<void> {
 
 		this._connectionManagementService = connectionManagementService;
 
 		this._options = connectionOptions;
 		this._params = params;
 		this._inputModel = model;
-		return new Promise<void>((resolve, reject) => {
-			this.updateModelServerCapabilities(model);
-			// If connecting from a query editor set "save connection" to false
-			if (params && (params.input && params.connectionType === ConnectionType.editor ||
-				params.connectionType === ConnectionType.temporary)) {
-				this._model.saveProfile = false;
-			}
 
-			resolve(this.showDialogWithModel().then(() => {
-				if (connectionResult && connectionResult.errorMessage) {
-					this.showErrorDialog(Severity.Error, this._connectionErrorTitle, connectionResult.errorMessage, connectionResult.callStack);
-				}
-			}));
-		});
+		this.updateModelServerCapabilities(model);
+
+		// If connecting from a query editor set "save connection" to false
+		if (params && (params.input && params.connectionType === ConnectionType.editor ||
+			params.connectionType === ConnectionType.temporary)) {
+			this._model.saveProfile = false;
+		}
+		await this.showDialogWithModel();
+
+		if (connectionResult && connectionResult.errorMessage) {
+			this.showErrorDialog(Severity.Error, this._connectionErrorTitle, connectionResult.errorMessage, connectionResult.callStack);
+		}
 	}
 
-	private doShowDialog(params: INewConnectionParams): Promise<void> {
+	private async doShowDialog(params: INewConnectionParams): Promise<void> {
 		if (!this._connectionDialog) {
 			this._connectionDialog = this._instantiationService.createInstance(ConnectionDialogWidget, this._providerDisplayNames, this._providerNameToDisplayNameMap[this._model.providerName], this._providerNameToDisplayNameMap);
 			this._connectionDialog.onCancel(() => {
@@ -458,12 +461,10 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		this._connectionDialog.newConnectionParams = params;
 		this._connectionDialog.updateProvider(this._providerNameToDisplayNameMap[this._currentProviderType]);
 
-		return new Promise<void>(() => {
-			const recentConnections: ConnectionProfile[] = this._connectionManagementService.getRecentConnections(params.providers);
-			this._connectionDialog.open(recentConnections.length > 0);
-			this.uiController.focusOnOpen();
-			recentConnections.forEach(conn => conn.dispose());
-		});
+		const recentConnections: ConnectionProfile[] = this._connectionManagementService.getRecentConnections(params.providers);
+		await this._connectionDialog.open(recentConnections.length > 0);
+		this.uiController.focusOnOpen();
+		recentConnections.forEach(conn => conn.dispose());
 	}
 
 	private showErrorDialog(severity: Severity, headerTitle: string, message: string, messageDetails?: string): void {
@@ -472,25 +473,27 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		// this solves the most common "hard error" that we've noticed
 		const helpLink = 'https://aka.ms/sqlopskerberos';
 		let actions: IAction[] = [];
-		if (!platform.isWindows && types.isString(message) && message.toLowerCase().includes('kerberos') && message.toLowerCase().includes('kinit')) {
+		if (!platform.isWindows && types.isString(message) && message.toLowerCase().indexOf('kerberos') > -1 && message.toLowerCase().indexOf('kinit') > -1) {
+			// Log the original error to console for debugging
+			this._logService.error(`Kerberos connection failure. Message : ${message} Message Details : ${messageDetails}`);
 			message = [
 				localize('kerberosErrorStart', "Connection failed due to Kerberos error."),
 				localize('kerberosHelpLink', "Help configuring Kerberos is available at {0}", helpLink),
 				localize('kerberosKinit', "If you have previously connected you may need to re-run kinit.")
 			].join('\r\n');
-			actions.push(new Action('Kinit', 'Run kinit', null, true, () => {
+			actions.push(new Action('Kinit', 'Run kinit', null, true, async () => {
 				this._connectionDialog.close();
-				this._clipboardService.writeText('kinit\r');
-				this._commandService.executeCommand('workbench.action.terminal.focus').then(resolve => {
-					// setTimeout to allow for terminal Instance to load.
-					setTimeout(() => {
-						return this._commandService.executeCommand('workbench.action.terminal.paste');
-					}, 10);
-				}).then(resolve => null, reject => null);
-				return null;
+				await this._clipboardService.writeText('kinit\r');
+				await this._commandService.executeCommand('workbench.action.terminal.focus');
+				// setTimeout to allow for terminal Instance to load.
+				setTimeout(() => {
+					return this._commandService.executeCommand('workbench.action.terminal.paste');
+				}, 10);
+				return;
 			}));
 
 		}
+		this._logService.error(message);
 		this._errorMessageService.showDialog(severity, headerTitle, message, messageDetails, actions);
 	}
 }

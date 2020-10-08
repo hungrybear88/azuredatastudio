@@ -10,8 +10,8 @@ import { Disposable } from 'vs/base/common/lifecycle';
 
 
 import { IModelViewService } from 'sql/platform/modelComponents/browser/modelViewService';
-import { IItemConfig, IComponentShape } from 'sql/workbench/api/common/sqlExtHostTypes';
-import { IModelView } from 'sql/platform/model/browser/modelViewService';
+import { IItemConfig, IComponentShape, IModelView } from 'sql/platform/model/browser/modelViewService';
+import { find } from 'vs/base/common/arrays';
 
 
 @extHostNamedCustomer(SqlMainContext.MainThreadModelView)
@@ -29,7 +29,7 @@ export class MainThreadModelView extends Disposable implements MainThreadModelVi
 		super();
 		this._proxy = _context.getProxy(SqlExtHostContext.ExtHostModelView);
 		viewService.onRegisteredModelView(view => {
-			if (this.knownWidgets.includes(view.id)) {
+			if (find(this.knownWidgets, x => x === view.id)) {
 				let handle = MainThreadModelView._handlePool++;
 				this._dialogs.set(handle, view);
 				this._proxy.$registerWidget(handle, view.id, view.connection, view.serverInfo);
@@ -66,12 +66,15 @@ export class MainThreadModelView extends Disposable implements MainThreadModelVi
 		return this.execModelViewAction(handle, (modelView) => modelView.setLayout(componentId, layout));
 	}
 
+	$setItemLayout(handle: number, containerId: string, item: IItemConfig): Thenable<void> {
+		return this.execModelViewAction(handle, (modelView) => modelView.setItemLayout(containerId, item));
+	}
+
 	private onEvent(handle: number, componentId: string, eventArgs: any) {
 		this._proxy.$handleEvent(handle, componentId, eventArgs);
 	}
 
 	$registerEvent(handle: number, componentId: string): Thenable<void> {
-		let properties: { [key: string]: any; } = { eventName: this.onEvent };
 		return this.execModelViewAction(handle, (modelView) => {
 			this._register(modelView.onEvent(e => {
 				if (e.componentId && e.componentId === componentId) {
@@ -95,6 +98,14 @@ export class MainThreadModelView extends Disposable implements MainThreadModelVi
 
 	$validate(handle: number, componentId: string): Thenable<boolean> {
 		return new Promise(resolve => this.execModelViewAction(handle, (modelView) => resolve(modelView.validate(componentId))));
+	}
+
+	$focus(handle: number, componentId: string): Thenable<void> {
+		return new Promise(resolve => this.execModelViewAction(handle, (modelView) => resolve(modelView.focus(componentId))));
+	}
+
+	$doAction(handle: number, componentId: string, action: string, ...args: any[]): Thenable<void> {
+		return new Promise(resolve => this.execModelViewAction(handle, (modelView) => resolve(modelView.doAction(componentId, action, ...args))));
 	}
 
 	private runCustomValidations(handle: number, componentId: string): Thenable<boolean> {

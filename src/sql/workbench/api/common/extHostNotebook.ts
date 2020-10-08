@@ -34,7 +34,7 @@ export class ExtHostNotebook implements ExtHostNotebookShape {
 		let adapter = this.findManagerForUri(uriString);
 		if (!adapter) {
 			adapter = await this._withProvider(providerHandle, (provider) => {
-				return this.createManager(provider, uri);
+				return this.getOrCreateManager(provider, uri);
 			});
 		}
 
@@ -54,8 +54,8 @@ export class ExtHostNotebook implements ExtHostNotebookShape {
 		}
 	}
 
-	$doStartServer(managerHandle: number): Thenable<void> {
-		return this._withServerManager(managerHandle, (serverManager) => serverManager.startServer());
+	$doStartServer(managerHandle: number, kernelSpec: azdata.nb.IKernelSpec): Thenable<void> {
+		return this._withServerManager(managerHandle, (serverManager) => serverManager.startServer(kernelSpec));
 	}
 
 	$doStopServer(managerHandle: number): Thenable<void> {
@@ -242,7 +242,7 @@ export class ExtHostNotebook implements ExtHostNotebookShape {
 		return undefined;
 	}
 
-	private async createManager(provider: azdata.nb.NotebookProvider, notebookUri: URI): Promise<NotebookManagerAdapter> {
+	private async getOrCreateManager(provider: azdata.nb.NotebookProvider, notebookUri: URI): Promise<NotebookManagerAdapter> {
 		let manager = await provider.getNotebookManager(notebookUri);
 		let uriString = notebookUri.toString();
 		let adapter = new NotebookManagerAdapter(provider, manager, uriString);

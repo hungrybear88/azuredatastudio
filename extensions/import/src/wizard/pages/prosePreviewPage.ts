@@ -3,22 +3,19 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as azdata from 'azdata';
 import * as nls from 'vscode-nls';
 import { ImportDataModel } from '../api/models';
 import { ImportPage } from '../api/importPage';
 import { FlatFileProvider } from '../../services/contracts';
 import { FlatFileWizard } from '../flatFileWizard';
-import { PerformanceObserver } from 'perf_hooks';
 
 const localize = nls.loadMessageBundle();
 
 export class ProsePreviewPage extends ImportPage {
 
-	private readonly successTitle: string = localize('flatFileImport.prosePreviewMessage', 'This operation analyzed the input file structure to generate the preview below for up to the first 50 rows.');
-	private readonly failureTitle: string = localize('flatFileImport.prosePreviewMessageFail', 'This operation was unsuccessful. Please try a different input file.');
+	private readonly successTitle: string = localize('flatFileImport.prosePreviewMessage', "This operation analyzed the input file structure to generate the preview below for up to the first 50 rows.");
+	private readonly failureTitle: string = localize('flatFileImport.prosePreviewMessageFail', "This operation was unsuccessful. Please try a different input file.");
 
 	private table: azdata.TableComponent;
 	private loading: azdata.LoadingComponent;
@@ -35,10 +32,10 @@ export class ProsePreviewPage extends ImportPage {
 		this.table = this.view.modelBuilder.table().withProperties<azdata.TableComponentProperties>({
 			data: undefined,
 			columns: undefined,
-			forceFitColumns: azdata.ColumnSizingMode.AutoFit
+			forceFitColumns: azdata.ColumnSizingMode.DataFit
 		}).component();
 		this.refresh = this.view.modelBuilder.button().withProperties({
-			label: localize('flatFileImport.refresh', 'Refresh'),
+			label: localize('flatFileImport.refresh', "Refresh"),
 			isFile: false
 		}).component();
 
@@ -74,7 +71,14 @@ export class ProsePreviewPage extends ImportPage {
 
 	async onPageEnter(): Promise<boolean> {
 		this.loading.loading = true;
-		let proseResult = await this.handleProse();
+		let proseResult: boolean;
+		let error: string;
+		try {
+			proseResult = await this.handleProse();
+		} catch (ex) {
+			error = ex.toString();
+		}
+
 		this.loading.loading = false;
 		if (proseResult) {
 			await this.populateTable(this.model.proseDataPreview, this.model.proseColumns.map(c => c.columnName));
@@ -87,7 +91,7 @@ export class ProsePreviewPage extends ImportPage {
 			await this.populateTable([], []);
 			this.isSuccess = false;
 			if (this.form) {
-				this.resultTextComponent.value = this.failureTitle;
+				this.resultTextComponent.value = this.failureTitle + '\n' + (error ?? '');
 			}
 			return false;
 		}
@@ -116,32 +120,32 @@ export class ProsePreviewPage extends ImportPage {
 	}
 
 	private async handleProse(): Promise<boolean> {
-		return this.provider.sendPROSEDiscoveryRequest({
+		const response = await this.provider.sendPROSEDiscoveryRequest({
 			filePath: this.model.filePath,
 			tableName: this.model.table,
 			schemaName: this.model.schema,
 			fileType: this.model.fileType
-		}).then((result) => {
-			if (result) {
-				this.model.proseDataPreview = null;
-				if (result.dataPreview) {
-					this.model.proseDataPreview = result.dataPreview;
-				}
-				this.model.proseColumns = [];
-				if (result.columnInfo) {
-					result.columnInfo.forEach((column) => {
-						this.model.proseColumns.push({
-							columnName: column.name,
-							dataType: column.sqlType,
-							primaryKey: false,
-							nullable: column.isNullable
-						});
-					});
-					return true;
-				}
-			}
-			return false;
 		});
+
+		this.model.proseDataPreview = null;
+		if (response.dataPreview) {
+			this.model.proseDataPreview = response.dataPreview;
+		}
+
+		this.model.proseColumns = [];
+		if (response.columnInfo) {
+			response.columnInfo.forEach((column) => {
+				this.model.proseColumns.push({
+					columnName: column.name,
+					dataType: column.sqlType,
+					primaryKey: false,
+					nullable: column.isNullable
+				});
+			});
+			return true;
+		}
+
+		return false;
 	}
 
 	private async populateTable(tableData: string[][], columnHeaders: string[]) {

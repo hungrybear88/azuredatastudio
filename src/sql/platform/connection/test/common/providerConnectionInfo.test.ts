@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ProviderConnectionInfo } from 'sql/platform/connection/common/providerConnectionInfo';
-import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
+import { IConnectionProfile, ConnectionOptionSpecialType, ServiceOptionType } from 'sql/platform/connection/common/interfaces';
 import * as azdata from 'azdata';
 import * as assert from 'assert';
-import { ConnectionOptionSpecialType, ServiceOptionType } from 'sql/workbench/api/common/sqlExtHostTypes';
 import { TestCapabilitiesService } from 'sql/platform/capabilities/test/common/testCapabilitiesService';
 import { mssqlProviderName } from 'sql/platform/connection/common/constants';
+import { assign } from 'vs/base/common/objects';
 
 suite('SQL ProviderConnectionInfo tests', () => {
 	let msSQLCapabilities: any;
@@ -25,12 +25,12 @@ suite('SQL ProviderConnectionInfo tests', () => {
 		savePassword: true,
 		groupFullName: 'g2/g2-2',
 		groupId: undefined,
-		getOptionsKey: undefined,
-		matches: undefined,
+		getOptionsKey: undefined!,
+		matches: undefined!,
 		providerName: mssqlProviderName,
-		options: undefined,
+		options: undefined!,
 		saveProfile: true,
-		id: undefined
+		id: undefined!
 	};
 
 	setup(() => {
@@ -38,11 +38,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 		let connectionProvider: azdata.ConnectionOption[] = [
 			{
 				name: 'connectionName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.connectionName,
@@ -50,11 +50,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'serverName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.serverName,
@@ -62,11 +62,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'databaseName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.databaseName,
@@ -74,11 +74,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'userName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.userName,
@@ -86,11 +86,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'authenticationType',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.authType,
@@ -98,11 +98,11 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'password',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.password,
@@ -110,14 +110,14 @@ suite('SQL ProviderConnectionInfo tests', () => {
 			},
 			{
 				name: 'encrypt',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: false,
 				isRequired: false,
-				specialValueType: undefined,
+				specialValueType: undefined!,
 				valueType: ServiceOptionType.string
 			}
 		];
@@ -132,7 +132,7 @@ suite('SQL ProviderConnectionInfo tests', () => {
 	});
 
 	test('constructor should accept undefined parameters', () => {
-		let conn = new ProviderConnectionInfo(undefined, undefined);
+		let conn = new ProviderConnectionInfo(undefined!, undefined!);
 		assert.equal(conn.serverName, undefined);
 	});
 
@@ -200,9 +200,9 @@ suite('SQL ProviderConnectionInfo tests', () => {
 	});
 
 	test('constructor should initialize the options given a valid model with options', () => {
-		let options = {};
+		let options: { [key: string]: string } = {};
 		options['encrypt'] = 'test value';
-		let conn2 = Object.assign({}, connectionProfile, { options: options });
+		let conn2 = assign({}, connectionProfile, { options: options });
 		let conn = new ProviderConnectionInfo(capabilitiesService, conn2);
 
 		assert.equal(conn.connectionName, conn2.connectionName);
@@ -223,7 +223,7 @@ suite('SQL ProviderConnectionInfo tests', () => {
 
 	test('getOptionsKey should create different id for different server names', () => {
 		let conn = new ProviderConnectionInfo(capabilitiesService, connectionProfile);
-		let conn2 = new ProviderConnectionInfo(capabilitiesService, Object.assign({}, connectionProfile, { serverName: connectionProfile.serverName + '1' }));
+		let conn2 = new ProviderConnectionInfo(capabilitiesService, assign({}, connectionProfile, { serverName: connectionProfile.serverName + '1' }));
 
 		assert.notEqual(conn.getOptionsKey(), conn2.getOptionsKey());
 	});
@@ -246,7 +246,7 @@ suite('SQL ProviderConnectionInfo tests', () => {
 	});
 
 	test('getProviderFromOptionsKey should return empty string give null', () => {
-		let optionsKey = undefined;
+		let optionsKey = undefined!;
 		let expectedProviderId: string = '';
 		let actual = ProviderConnectionInfo.getProviderFromOptionsKey(optionsKey);
 

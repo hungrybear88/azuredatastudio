@@ -13,3 +13,12 @@
 	flex-direction: row;
 	margin-right: 5px;
 }
+
+.monaco-select-box {
+	padding: 0 22px 0 6px;
+}
+
+.monaco-inputbox > .wrapper > .input,
+.monaco-inputbox > .wrapper > .mirror {
+	padding-left: 6px !important;
+}

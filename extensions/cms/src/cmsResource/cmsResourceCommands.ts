@@ -3,7 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
 import * as nls from 'vscode-nls';
 import * as azdata from 'azdata';
 import { AppContext } from '../appContext';
@@ -34,20 +33,27 @@ export function registerCmsServerCommand(appContext: AppContext, tree: CmsResour
 					return server.name === registeredCmsServerName;
 				});
 			}
-			if (!serverExists) {
-				// remove any group ID if user selects a connection from
-				// recent connection list
-				connection.options.groupId = null;
-				let registeredCmsServerDescription = connection.options.registeredServerDescription;
-				let ownerUri = await azdata.connection.getUriForConnection(connection.connectionId);
-				appContext.cmsUtils.cacheRegisteredCmsServer(registeredCmsServerName, registeredCmsServerDescription, ownerUri, connection);
-				tree.notifyNodeChanged(undefined);
-			} else {
-				// error out for same server name
-				let errorText = localize('cms.errors.sameCmsServerName', 'Central Management Server Group already has a Registered Server with the name {0}', registeredCmsServerName);
-				appContext.apiWrapper.showErrorMessage(errorText);
+
+			// don't allow duplicate server entries
+			if (serverExists) {
+				let errorText = localize('cms.errors.sameCmsServerName', "Central Management Server Group already has a Registered Server with the name {0}", registeredCmsServerName);
 				throw new Error(errorText);
 			}
+
+			// don't allow azure servers
+			let isCloud: boolean = connection.options.isCloud;
+			if (isCloud) {
+				let errorText = localize('cms.errors.azureNotAllowed', "Azure SQL Servers cannot be used as Central Management Servers");
+				throw new Error(errorText);
+			}
+
+			// remove any group ID if user selects a connection from
+			// recent connection list
+			connection.options.groupId = null;
+			let registeredCmsServerDescription = connection.options.registeredServerDescription;
+			let ownerUri = await azdata.connection.getUriForConnection(connection.connectionId);
+			appContext.cmsUtils.cacheRegisteredCmsServer(registeredCmsServerName, registeredCmsServerDescription, ownerUri, connection);
+			tree.notifyNodeChanged(undefined);
 		}
 	});
 }
@@ -85,10 +91,10 @@ export function deleteRegisteredServerCommand(appContext: AppContext, tree: CmsR
 			return;
 		}
 		let result = await appContext.apiWrapper.showWarningMessage(
-			`${localize('cms.confirmDeleteServer', 'Are you sure you want to delete')} ${node.name}?`,
-			localize('cms.yes', 'Yes'),
-			localize('cms.no', 'No'));
-		if (result && result === localize('cms.yes', 'Yes')) {
+			`${localize('cms.confirmDeleteServer', "Are you sure you want to delete")} ${node.name}?`,
+			localize('cms.yes', "Yes"),
+			localize('cms.no', "No"));
+		if (result && result === localize('cms.yes', "Yes")) {
 			await appContext.cmsUtils.removeRegisteredServer(node.name, node.relativePath, node.ownerUri);
 			tree.notifyNodeChanged(node.parent);
 		}
@@ -102,10 +108,10 @@ export function addServerGroupCommand(appContext: AppContext, tree: CmsResourceT
 			return;
 		}
 		// add a dialog for adding a group
-		let title = localize('cms.AddServerGroup', 'Add Server Group');
+		let title = localize('cms.AddServerGroup', "Add Server Group");
 		let dialog = azdata.window.createModelViewDialog(title, 'cms.addServerGroup');
-		dialog.okButton.label = localize('cms.OK', 'OK');
-		dialog.cancelButton.label = localize('cms.Cancel', 'Cancel');
+		dialog.okButton.label = localize('cms.OK', "OK");
+		dialog.cancelButton.label = localize('cms.Cancel', "Cancel");
 		let mainTab = azdata.window.createTab(title);
 		let serverGroupName: string = null;
 		let serverDescription: string = null;
@@ -126,10 +132,10 @@ export function addServerGroupCommand(appContext: AppContext, tree: CmsResourceT
 			let formModel = view.modelBuilder.formContainer()
 				.withFormItems([{
 					component: nameTextBox,
-					title: localize('cms.ServerGroupName', 'Server Group Name')
+					title: localize('cms.ServerGroupName', "Server Group Name")
 				}, {
 					component: descriptionTextBox,
-					title: localize('cms.ServerGroupDescription', 'Server Group Description')
+					title: localize('cms.ServerGroupDescription', "Server Group Description")
 				}]).withLayout({ width: '100%' }).component();
 			await view.initializeModel(formModel);
 		});
@@ -146,7 +152,7 @@ export function addServerGroupCommand(appContext: AppContext, tree: CmsResourceT
 				tree.notifyNodeChanged(node);
 			} else {
 				// error out for same server group
-				const errorText = localize('cms.errors.sameServerGroupName', '{0} already has a Server Group with the name {1}', node.name, serverGroupName);
+				const errorText = localize('cms.errors.sameServerGroupName', "{0} already has a Server Group with the name {1}", node.name, serverGroupName);
 				appContext.apiWrapper.showErrorMessage(errorText);
 				throw new Error(errorText);
 			}
@@ -161,10 +167,10 @@ export function deleteServerGroupCommand(appContext: AppContext, tree: CmsResour
 			return;
 		}
 		let result = await appContext.apiWrapper.showWarningMessage(
-			`${localize('cms.confirmDeleteGroup', 'Are you sure you want to delete')} ${node.name}?`,
-			localize('cms.yes', 'Yes'),
-			localize('cms.no', 'No'));
-		if (result && result === localize('cms.yes', 'Yes')) {
+			`${localize('cms.confirmDeleteGroup', "Are you sure you want to delete")} ${node.name}?`,
+			localize('cms.yes', "Yes"),
+			localize('cms.no', "No"));
+		if (result && result === localize('cms.yes', "Yes")) {
 			await appContext.cmsUtils.removeServerGroup(node.name, node.relativePath, node.ownerUri);
 			tree.notifyNodeChanged(node.parent);
 		}
@@ -180,4 +186,3 @@ export function refreshCommand(appContext: AppContext, tree: CmsResourceTreeProv
 		tree.notifyNodeChanged(node);
 	});
 }
-

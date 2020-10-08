@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as azdata from 'azdata';
 
 /**
@@ -25,6 +23,11 @@ export interface Tenant {
 	 * Identifier of the user in the tenant
 	 */
 	userId: string;
+
+	/**
+	 * The category the user has set their tenant to (e.g. Home Tenant)
+	 */
+	tenantCategory: string;
 }
 
 /**
@@ -40,27 +43,17 @@ export interface Resource {
 	 * Endpoint url used to access the resource
 	 */
 	endpoint: string;
-}
-
-/**
- * Represents the arguments that identify an instantiation of the AAD account provider
- */
-export interface Arguments {
-	/**
-	 * Host of the authority
-	 */
-	host: string;
 
 	/**
-	 * Identifier of the client application
+	 * Resource ID for azdata
 	 */
-	clientId: string;
+	azureResourceId?: azdata.AzureResource
 }
 
 /**
  * Represents settings for an AAD account provider
  */
-export interface Settings {
+interface Settings {
 	/**
 	 * Host of the authority
 	 */
@@ -77,6 +70,11 @@ export interface Settings {
 	signInResourceId?: string;
 
 	/**
+	 * Information that describes the Microsoft resource management resource
+	 */
+	microsoftResource?: Resource
+
+	/**
 	 * Information that describes the AAD graph resource
 	 */
 	graphResource?: Resource;
@@ -90,6 +88,16 @@ export interface Settings {
 	 * Information that describes the SQL Azure resource
 	 */
 	sqlResource?: Resource;
+
+	/**
+	 * Information that describes the OSS RDBMS resource
+	 */
+	ossRdbmsResource?: Resource;
+
+	/**
+	 * Information that describes the Azure Key Vault resource
+	 */
+	azureKeyVaultResource?: Resource;
 
 	/**
 	 * A list of tenant IDs to authenticate against. If defined, then these IDs will be used
@@ -108,6 +116,10 @@ export interface Settings {
 	 * Redirect URI that is used to signify the end of the interactive aspect of sign it
 	 */
 	redirectUri?: string;
+
+	scopes?: string[]
+
+	portalEndpoint?: string
 }
 
 /**
@@ -135,10 +147,21 @@ export interface AzureAccountProviderMetadata extends azdata.AccountProviderMeta
 	settings: Settings;
 }
 
+export enum AzureAuthType {
+	AuthCodeGrant = 0,
+	DeviceCode = 1
+}
+
 /**
  * Properties specific to an Azure account
  */
-export interface AzureAccountProperties {
+interface AzureAccountProperties {
+	/**
+	 * Auth type of azure used to authenticate this account.
+	 */
+	azureAuthType?: AzureAuthType
+
+	providerSettings: AzureAccountProviderMetadata;
 	/**
 	 * Whether or not the account is a Microsoft account
 	 */
@@ -148,6 +171,17 @@ export interface AzureAccountProperties {
 	 * A list of tenants (aka directories) that the account belongs to
 	 */
 	tenants: Tenant[];
+
+	/**
+	 * A list of subscriptions the user belongs to
+	 */
+	subscriptions?: Subscription[];
+}
+
+export interface Subscription {
+	id: string,
+	tenantId: string,
+	displayName: string
 }
 
 /**
@@ -190,3 +224,8 @@ export interface AzureAccountSecurityToken {
  * an access token. The list of tenants correspond to the tenants in the account properties.
  */
 export type AzureAccountSecurityTokenCollection = { [tenantId: string]: AzureAccountSecurityToken };
+
+export interface Deferred<T> {
+	resolve: (result: T | Promise<T>) => void;
+	reject: (reason: any) => void;
+}

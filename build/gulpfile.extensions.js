@@ -24,13 +24,19 @@ const plumber = require('gulp-plumber');
 const ext = require('./lib/extensions');
 
 const extensionsPath = path.join(path.dirname(__dirname), 'extensions');
+// {{SQL CARBON EDIT}}
+const sqlLocalizedExtensions = [
+	'dacpac',
+	'schema-compare'
+];
+// {{SQL CARBON EDIT}}
 
 const compilations = glob.sync('**/tsconfig.json', {
 	cwd: extensionsPath,
 	ignore: ['**/out/**', '**/node_modules/**']
 });
 
-const getBaseUrl = out => `https://ticino.blob.core.windows.net/sourcemaps/${commit}/${out}`;
+const getBaseUrl = out => `https://sqlopsbuilds.blob.core.windows.net/sourcemaps/${commit}/${out}`;
 
 const tasks = compilations.map(function (tsconfigFile) {
 	const absolutePath = path.join(extensionsPath, tsconfigFile);
@@ -52,10 +58,10 @@ const tasks = compilations.map(function (tsconfigFile) {
 	let headerId, headerOut;
 	let index = relativeDirname.indexOf('/');
 	if (index < 0) {
-		headerId = 'vscode.' + relativeDirname;
+		headerId = 'microsoft.' + relativeDirname; // {{SQL CARBON EDIT}}
 		headerOut = 'out';
 	} else {
-		headerId = 'vscode.' + relativeDirname.substr(0, index);
+		headerId = 'microsoft.' + relativeDirname.substr(0, index); // {{SQL CARBON EDIT}}
 		headerOut = relativeDirname.substr(index + 1) + '/out';
 	}
 
@@ -108,8 +114,9 @@ const tasks = compilations.map(function (tsconfigFile) {
 	const cleanTask = task.define(`clean-extension-${name}`, util.rimraf(out));
 
 	const compileTask = task.define(`compile-extension:${name}`, task.series(cleanTask, () => {
-		const pipeline = createPipeline(false, true);
-		const input = pipeline.tsProjectSrc();
+		const pipeline = createPipeline(sqlLocalizedExtensions.includes(name), true); // {{SQL CARBON EDIT}}
+		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
+		const input = es.merge(nonts, pipeline.tsProjectSrc());
 
 		return input
 			.pipe(pipeline())
@@ -118,7 +125,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 	const watchTask = task.define(`watch-extension:${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(false);
-		const input = pipeline.tsProjectSrc();
+		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
+		const input = es.merge(nonts, pipeline.tsProjectSrc());
 		const watchInput = watcher(src, { ...srcOpts, ...{ readDelay: 200 } });
 
 		return watchInput
@@ -128,7 +136,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 	const compileBuildTask = task.define(`compile-build-extension-${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(true, true);
-		const input = pipeline.tsProjectSrc();
+		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
+		const input = es.merge(nonts, pipeline.tsProjectSrc());
 
 		return input
 			.pipe(pipeline())

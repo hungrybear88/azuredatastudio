@@ -4,6 +4,7 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.packageRebuildExtensionsStream = exports.cleanRebuildExtensions = exports.packageExternalExtensionsStream = exports.packageMarketplaceExtensionsStream = exports.packageLocalExtensionsStream = exports.fromMarketplace = void 0;
 const es = require("event-stream");
 const fs = require("fs");
 const glob = require("glob");
@@ -26,7 +27,7 @@ const webpackGulp = require('webpack-stream');
 const util = require('./util');
 const root = path.dirname(path.dirname(__dirname));
 const commit = util.getVersion(root);
-const sourceMappingURLBase = `https://ticino.blob.core.windows.net/sourcemaps/${commit}`;
+const sourceMappingURLBase = `https://sqlopsbuilds.blob.core.windows.net/sourcemaps/${commit}`;
 function fromLocal(extensionPath) {
     const webpackFilename = path.join(extensionPath, 'extension.webpack.config.js');
     const input = fs.existsSync(webpackFilename)
@@ -181,34 +182,41 @@ function fromMarketplace(extensionName, version, metadata) {
 exports.fromMarketplace = fromMarketplace;
 const excludedExtensions = [
     'vscode-api-tests',
+    'vscode-web-playground',
     'vscode-colorize-tests',
     'vscode-test-resolver',
     'ms-vscode.node-debug',
     'ms-vscode.node-debug2',
-    // {{SQL CARBON EDIT}}
-    'integration-tests'
+    'vscode-notebook-tests',
+    'integration-tests',
 ];
 // {{SQL CARBON EDIT}}
-const sqlBuiltInExtensions = [
-    // Add SQL built-in extensions here.
-    // the extension will be excluded from SQLOps package and will have separate vsix packages
+const externalExtensions = [
+    // This is the list of SQL extensions which the source code is included in this repository, but
+    // they get packaged separately. Adding extension name here, will make the build to create
+    // a separate vsix package for the extension and the extension will be excluded from the main package.
+    // Any extension not included here will be installed by default.
     'admin-tool-ext-win',
     'agent',
+    'arc',
     'import',
     'profiler',
     'admin-pack',
     'dacpac',
     'schema-compare',
     'cms',
-    'query-history'
+    'query-history',
+    'liveshare',
+    'sql-database-projects',
+    'machine-learning',
+    'sql-assessment'
 ];
-// make resource deployment and BDC extension only available in insiders
-if (process.env['VSCODE_QUALITY'] === 'stable') {
-    sqlBuiltInExtensions.push('resource-deployment');
-    sqlBuiltInExtensions.push('big-data-cluster');
-}
-const builtInExtensions = process.env['VSCODE_QUALITY'] === 'stable' ? require('../builtInExtensions.json') : require('../builtInExtensions-insiders.json');
-// {{SQL CARBON EDIT}} - End
+// extensions that require a rebuild since they have native parts
+const rebuildExtensions = [
+    'big-data-cluster',
+    'mssql'
+];
+const builtInExtensions = JSON.parse(fs.readFileSync(path.join(__dirname, '../../product.json'), 'utf8')).builtInExtensions;
 function packageLocalExtensionsStream() {
     const localExtensionDescriptions = glob.sync('extensions/*/package.json')
         .map(manifestPath => {
@@ -218,7 +226,7 @@ function packageLocalExtensionsStream() {
     })
         .filter(({ name }) => excludedExtensions.indexOf(name) === -1)
         .filter(({ name }) => builtInExtensions.every(b => b.name !== name))
-        .filter(({ name }) => sqlBuiltInExtensions.indexOf(name) === -1); // {{SQL CARBON EDIT}} add aditional filter
+        .filter(({ name }) => externalExtensions.indexOf(name) === -1); // {{SQL CARBON EDIT}} Remove external Extensions with separate package
     const nodeModules = gulp.src('extensions/node_modules/**', { base: '.' });
     const localExtensions = localExtensionDescriptions.map(extension => {
         return fromLocal(extension.path)
@@ -237,66 +245,40 @@ function packageMarketplaceExtensionsStream() {
         .pipe(util2.setExecutableBit(['**/*.sh']));
 }
 exports.packageMarketplaceExtensionsStream = packageMarketplaceExtensionsStream;
-const vfs = require("vinyl-fs");
-function packageBuiltInExtensions() {
-    const sqlBuiltInLocalExtensionDescriptions = glob.sync('extensions/*/package.json')
+function packageExternalExtensionsStream() {
+    const extenalExtensionDescriptions = glob.sync('extensions/*/package.json')
         .map(manifestPath => {
         const extensionPath = path.dirname(path.join(root, manifestPath));
         const extensionName = path.basename(extensionPath);
         return { name: extensionName, path: extensionPath };
     })
-        .filter(({ name }) => excludedExtensions.indexOf(name) === -1)
-        .filter(({ name }) => builtInExtensions.every(b => b.name !== name))
-        .filter(({ name }) => sqlBuiltInExtensions.indexOf(name) >= 0);
-    const visxDirectory = path.join(path.dirname(root), 'vsix');
-    try {
-        if (!fs.existsSync(visxDirectory)) {
-            fs.mkdirSync(visxDirectory);
-        }
-    }
-    catch (err) {
-        // don't fail the build if the output directory already exists
-        console.warn(err);
-    }
-    sqlBuiltInLocalExtensionDescriptions.forEach(element => {
-        let pkgJson = JSON.parse(fs.readFileSync(path.join(element.path, 'package.json'), { encoding: 'utf8' }));
-        const packagePath = path.join(visxDirectory, `${pkgJson.name}-${pkgJson.version}.vsix`);
-        console.info('Creating vsix for ' + element.path + ' result:' + packagePath);
-        vsce.createVSIX({
-            cwd: element.path,
-            packagePath: packagePath,
-            useYarn: true
-        });
+        .filter(({ name }) => externalExtensions.indexOf(name) >= 0);
+    const builtExtensions = extenalExtensionDescriptions.map(extension => {
+        return fromLocal(extension.path)
+            .pipe(rename(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
     });
+    return es.merge(builtExtensions);
 }
-exports.packageBuiltInExtensions = packageBuiltInExtensions;
-function packageExtensionTask(extensionName, platform, arch) {
-    var destination = path.join(path.dirname(root), 'azuredatastudio') + (platform ? '-' + platform : '') + (arch ? '-' + arch : '');
-    if (platform === 'darwin') {
-        destination = path.join(destination, 'Azure Data Studio.app', 'Contents', 'Resources', 'app', 'extensions', extensionName);
-    }
-    else {
-        destination = path.join(destination, 'resources', 'app', 'extensions', extensionName);
-    }
-    platform = platform || process.platform;
-    return () => {
-        const root = path.resolve(path.join(__dirname, '../..'));
-        const localExtensionDescriptions = glob.sync('extensions/*/package.json')
-            .map(manifestPath => {
-            const extensionPath = path.dirname(path.join(root, manifestPath));
-            const extensionName = path.basename(extensionPath);
-            return { name: extensionName, path: extensionPath };
-        })
-            .filter(({ name }) => extensionName === name);
-        const localExtensions = es.merge(...localExtensionDescriptions.map(extension => {
-            return fromLocal(extension.path);
-        }));
-        let result = localExtensions
-            .pipe(util2.skipDirectories())
-            .pipe(util2.fixWin32DirectoryPermissions())
-            .pipe(filter(['**', '!LICENSE', '!LICENSES.chromium.html', '!version']));
-        return result.pipe(vfs.dest(destination));
-    };
-}
-exports.packageExtensionTask = packageExtensionTask;
+exports.packageExternalExtensionsStream = packageExternalExtensionsStream;
 // {{SQL CARBON EDIT}} - End
+function cleanRebuildExtensions(root) {
+    return Promise.all(rebuildExtensions.map(async (e) => {
+        await util2.rimraf(path.join(root, e))();
+    })).then();
+}
+exports.cleanRebuildExtensions = cleanRebuildExtensions;
+function packageRebuildExtensionsStream() {
+    const extenalExtensionDescriptions = glob.sync('extensions/*/package.json')
+        .map(manifestPath => {
+        const extensionPath = path.dirname(path.join(root, manifestPath));
+        const extensionName = path.basename(extensionPath);
+        return { name: extensionName, path: extensionPath };
+    })
+        .filter(({ name }) => rebuildExtensions.indexOf(name) >= 0);
+    const builtExtensions = extenalExtensionDescriptions.map(extension => {
+        return fromLocal(extension.path)
+            .pipe(rename(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
+    });
+    return es.merge(builtExtensions);
+}
+exports.packageRebuildExtensionsStream = packageRebuildExtensionsStream;

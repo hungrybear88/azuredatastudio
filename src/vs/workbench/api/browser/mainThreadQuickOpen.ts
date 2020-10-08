@@ -8,6 +8,7 @@ import { ExtHostContext, MainThreadQuickOpenShape, ExtHostQuickOpenShape, Transf
 import { extHostNamedCustomer } from 'vs/workbench/api/common/extHostCustomers';
 import { URI } from 'vs/base/common/uri';
 import { CancellationToken } from 'vs/base/common/cancellation';
+import { ThemeIcon } from 'vs/platform/theme/common/themeService';
 
 interface QuickInputSession {
 	input: IQuickInput;
@@ -36,6 +37,15 @@ export class MainThreadQuickOpen implements MainThreadQuickOpenShape {
 	}
 
 	$show(instance: number, options: IPickOptions<TransferQuickPickItems>, token: CancellationToken): Promise<number | number[] | undefined> {
+		// {{ SQL CARBON EDIT }} Fix a11y issue https://github.com/microsoft/azuredatastudio/issues/9232
+		const activeElement = document.activeElement as HTMLElement;
+		const focusBackToStartingPosition = () => {
+			try {
+				activeElement?.focus();
+			} catch { }
+		};
+		// {{ SQL CARBON EDIT }} Fix a11y issue https://github.com/microsoft/azuredatastudio/issues/9232
+
 		const contents = new Promise<TransferQuickPickItems[]>((resolve, reject) => {
 			this._items[instance] = { resolve, reject };
 		});
@@ -51,6 +61,7 @@ export class MainThreadQuickOpen implements MainThreadQuickOpenShape {
 
 		if (options.canPickMany) {
 			return this._quickInputService.pick(contents, options as { canPickMany: true }, token).then(items => {
+				focusBackToStartingPosition(); // {{ SQL CARBON EDIT }} Fix a11y issue https://github.com/microsoft/azuredatastudio/issues/9232
 				if (items) {
 					return items.map(item => item.handle);
 				}
@@ -58,6 +69,7 @@ export class MainThreadQuickOpen implements MainThreadQuickOpenShape {
 			});
 		} else {
 			return this._quickInputService.pick(contents, options, token).then(item => {
+				focusBackToStartingPosition(); // {{ SQL CARBON EDIT }} Fix a11y issue https://github.com/microsoft/azuredatastudio/issues/9232
 				if (item) {
 					return item.handle;
 				}
@@ -84,7 +96,7 @@ export class MainThreadQuickOpen implements MainThreadQuickOpenShape {
 
 	// ---- input
 
-	$input(options: IInputBoxOptions | undefined, validateInput: boolean, token: CancellationToken): Promise<string> {
+	$input(options: IInputBoxOptions | undefined, validateInput: boolean, token: CancellationToken): Promise<string | undefined> {
 		const inputOptions: IInputOptions = Object.create(null);
 
 		if (options) {
@@ -185,14 +197,22 @@ export class MainThreadQuickOpen implements MainThreadQuickOpenShape {
 						return this._quickInputService.backButton;
 					}
 					const { iconPath, tooltip, handle } = button;
-					return {
-						iconPath: iconPath && {
-							dark: URI.revive(iconPath.dark),
-							light: iconPath.light && URI.revive(iconPath.light)
-						},
-						tooltip,
-						handle
-					};
+					if ('id' in iconPath) {
+						return {
+							iconClass: ThemeIcon.asClassName(iconPath),
+							tooltip,
+							handle
+						};
+					} else {
+						return {
+							iconPath: {
+								dark: URI.revive(iconPath.dark),
+								light: iconPath.light && URI.revive(iconPath.light)
+							},
+							tooltip,
+							handle
+						};
+					}
 				});
 			} else {
 				(input as any)[param] = params[param];

@@ -20,8 +20,10 @@ export interface IAccountManagementService {
 	addAccount(providerId: string): Thenable<void>;
 	getAccountProviderMetadata(): Thenable<azdata.AccountProviderMetadata[]>;
 	getAccountsForProvider(providerId: string): Thenable<azdata.Account[]>;
-	getSecurityToken(account: azdata.Account, resource: azdata.AzureResource): Thenable<{}>;
+	getAccounts(): Thenable<azdata.Account[]>;
+	getSecurityToken(account: azdata.Account, resource: azdata.AzureResource): Thenable<{ [key: string]: { token: string } }>;
 	removeAccount(accountKey: azdata.AccountKey): Thenable<boolean>;
+	removeAccounts(): Thenable<boolean>;
 	refreshAccount(account: azdata.Account): Thenable<azdata.Account>;
 
 	// UI METHODS //////////////////////////////////////////////////////////
@@ -44,7 +46,9 @@ export interface IAccountManagementService {
 // Enum matching the AzureResource enum from azdata.d.ts
 export enum AzureResource {
 	ResourceManagement = 0,
-	Sql = 1
+	Sql = 1,
+	OssRdbms = 2,
+	AzureKeyVault = 3
 }
 
 export interface IAccountStore {

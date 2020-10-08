@@ -76,6 +76,12 @@ export class SqlClusterConnection {
 		return authType && authType.toLowerCase() === constants.integratedAuth;
 	}
 
+	public updateUsername(username: string): void {
+		if (username) {
+			this._user = username;
+		}
+	}
+
 	public updatePassword(password: string): void {
 		if (password) {
 			this._password = password;
@@ -84,15 +90,15 @@ export class SqlClusterConnection {
 
 	private validate(connectionInfo: azdata.ConnectionInfo): void {
 		if (!connectionInfo) {
-			throw new Error(localize('connectionInfoUndefined', 'ConnectionInfo is undefined.'));
+			throw new Error(localize('connectionInfoUndefined', "ConnectionInfo is undefined."));
 		}
 		if (!connectionInfo.options) {
-			throw new Error(localize('connectionInfoOptionsUndefined', 'ConnectionInfo.options is undefined.'));
+			throw new Error(localize('connectionInfoOptionsUndefined', "ConnectionInfo.options is undefined."));
 		}
 		let missingProperties: string[] = this.getMissingProperties(connectionInfo);
 		if (missingProperties && missingProperties.length > 0) {
 			throw new Error(localize('connectionInfoOptionsMissingProperties',
-				'Some missing properties in connectionInfo.options: {0}',
+				"Some missing properties in connectionInfo.options: {0}",
 				missingProperties.join(', ')));
 		}
 	}

@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import { TreeItem, TreeItemCollapsibleState } from 'vscode';
 import { NodeInfo } from 'azdata';
 import * as nls from 'vscode-nls';
@@ -47,5 +45,5 @@ export class AzureResourceAccountNotSignedInTreeNode extends TreeNode {
 		return 'message_accountNotSignedIn';
 	}
 
-	private static readonly signInLabel = localize('azure.resource.tree.accountNotSignedInTreeNode.signInLabel', 'Sign in to Azure...');
+	private static readonly signInLabel = localize('azure.resource.tree.accountNotSignedInTreeNode.signInLabel', "Sign in to Azure...");
 }

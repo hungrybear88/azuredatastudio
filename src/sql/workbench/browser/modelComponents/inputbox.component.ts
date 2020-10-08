@@ -11,7 +11,6 @@ import {
 import * as azdata from 'azdata';
 
 import { ComponentBase } from 'sql/workbench/browser/modelComponents/componentBase';
-import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/workbench/browser/modelComponents/interfaces';
 import { InputBox } from 'sql/base/browser/ui/inputBox/inputBox';
 import { attachInputBoxStyler } from 'sql/platform/theme/common/styler';
 
@@ -20,9 +19,13 @@ import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/work
 import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
 import * as nls from 'vs/nls';
 import { inputBackground, inputBorder } from 'vs/platform/theme/common/colorRegistry';
-import * as DomUtils from 'vs/base/browser/dom';
-import { StandardKeyboardEvent, IKeyboardEvent } from 'vs/base/browser/keyboardEvent';
+import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { KeyCode } from 'vs/base/common/keyCodes';
+import * as DOM from 'vs/base/browser/dom';
+import { assign } from 'vs/base/common/objects';
+import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/platform/dashboard/browser/interfaces';
+import { isNumber } from 'vs/base/common/types';
+import { convertSize, convertSizeToNumber } from 'sql/base/browser/dom';
 
 @Component({
 	selector: 'modelview-inputBox',
@@ -79,18 +82,18 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 						args: this._input.value
 					});
 					if (this.stopEnterPropagation) {
-						e.stopPropagation();
+						DOM.EventHelper.stop(e, true);
 					}
 				}
 			});
 			this.registerInput(this._input, () => !this.multiline);
 		}
 		if (this._textareaContainer) {
-			let textAreaInputOptions = Object.assign({}, inputOptions, { flexibleHeight: true, type: 'textarea' });
+			let textAreaInputOptions = assign({}, inputOptions, { flexibleHeight: true, type: 'textarea' });
 			this._textAreaInput = new InputBox(this._textareaContainer.nativeElement, this.contextViewService, textAreaInputOptions);
 			this.onkeydown(this._textAreaInput.inputElement, (e: StandardKeyboardEvent) => {
 				if (this.tryHandleKeyEvent(e)) {
-					e.stopPropagation();
+					DOM.EventHelper.stop(e, true);
 				}
 				if (e.keyCode === KeyCode.Enter) {
 					this.fireEvent({
@@ -98,7 +101,7 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 						args: this._textAreaInput.value
 					});
 					if (this.stopEnterPropagation) {
-						e.stopPropagation();
+						DOM.EventHelper.stop(e, true);
 					}
 				}
 				// Else assume that keybinding service handles routing this to a command
@@ -107,10 +110,6 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 			this.registerInput(this._textAreaInput, () => this.multiline);
 		}
 		this.inputElement.hideErrors = true;
-	}
-
-	private onkeydown(domNode: HTMLElement, listener: (e: IKeyboardEvent) => void): void {
-		this._register(DomUtils.addDisposableListener(domNode, DomUtils.EventType.KEY_DOWN, (e: KeyboardEvent) => listener(new StandardKeyboardEvent(e))));
 	}
 
 	private tryHandleKeyEvent(e: StandardKeyboardEvent): boolean {
@@ -161,12 +160,16 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 
 	public validate(): Thenable<boolean> {
 		return super.validate().then(valid => {
+			const otherErrorMsg = valid || this.inputElement.value === '' ? undefined : this.validationErrorMessage;
 			valid = valid && this.inputElement.validate();
 
 			// set aria label based on validity of input
 			if (valid) {
 				this.inputElement.setAriaLabel(this.ariaLabel);
 			} else {
+				if (otherErrorMsg) {
+					this.inputElement.showMessage({ type: MessageType.ERROR, content: otherErrorMsg }, true);
+				}
 				if (this.ariaLabel) {
 					this.inputElement.setAriaLabel(nls.localize('period', "{0}. {1}", this.ariaLabel, this.inputElement.inputElement.validationMessage));
 				} else {
@@ -190,11 +193,11 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 	}
 
 	private layoutInputBox(): void {
-		if (this.width) {
-			this.inputElement.width = this.convertSizeToNumber(this.width);
+		if (isNumber(this.width) || this.width) {
+			this.inputElement.width = convertSizeToNumber(this.width);
 		}
-		if (this.height) {
-			this.inputElement.setHeight(this.convertSize(this.height));
+		if (isNumber(this.height) || this.height) {
+			this.inputElement.setHeight(convertSize(this.height));
 		}
 	}
 
@@ -214,10 +217,10 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 			input.inputElement.type = this.inputType;
 			if (this.inputType === 'number') {
 				input.inputElement.step = 'any';
-				if (this.min) {
+				if (isNumber(this.min)) {
 					input.inputElement.min = this.min.toString();
 				}
-				if (this.max) {
+				if (isNumber(this.max)) {
 					input.inputElement.max = this.max.toString();
 				}
 			}
@@ -228,10 +231,10 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 		input.setEnabled(this.enabled);
 		this.layoutInputBox();
 		if (this.multiline) {
-			if (this.rows) {
+			if (isNumber(this.rows)) {
 				this.inputElement.rows = this.rows;
 			}
-			if (this.columns) {
+			if (isNumber(this.columns)) {
 				this.inputElement.columns = this.columns;
 			}
 		}
@@ -241,6 +244,7 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 		}
 
 		input.inputElement.required = this.required;
+		input.inputElement.readOnly = this.readOnly;
 	}
 
 	// CSS-bound properties
@@ -251,14 +255,6 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 
 	public set value(newValue: string) {
 		this.setPropertyFromUI<azdata.InputBoxProperties, string>((props, value) => props.value = value, newValue);
-	}
-
-	public get ariaLabel(): string {
-		return this.getPropertyOrDefault<azdata.InputBoxProperties, string>((props) => props.ariaLabel, '');
-	}
-
-	public set ariaLabel(newValue: string) {
-		this.setPropertyFromUI<azdata.InputBoxProperties, string>((props, value) => props.ariaLabel = value, newValue);
 	}
 
 	public get ariaLive() {
@@ -321,6 +317,14 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 		this.setPropertyFromUI<azdata.InputBoxProperties, boolean>((props, value) => props.multiline = value, newValue);
 	}
 
+	public get readOnly(): boolean {
+		return this.getPropertyOrDefault<azdata.InputBoxProperties, boolean>((props) => props.readOnly, false);
+	}
+
+	public set readOnly(newValue: boolean) {
+		this.setPropertyFromUI<azdata.InputBoxProperties, boolean>((props, value) => props.readOnly = value, newValue);
+	}
+
 	public get required(): boolean {
 		return this.getPropertyOrDefault<azdata.InputBoxProperties, boolean>((props) => props.required, false);
 	}
@@ -335,5 +339,17 @@ export default class InputBoxComponent extends ComponentBase implements ICompone
 
 	public set stopEnterPropagation(newValue: boolean) {
 		this.setPropertyFromUI<azdata.InputBoxProperties, boolean>((props, value) => props.stopEnterPropagation = value, newValue);
+	}
+
+	public focus(): void {
+		this.inputElement.focus();
+	}
+
+	public get validationErrorMessage(): string {
+		return this.getPropertyOrDefault<azdata.InputBoxProperties, string>((props) => props.validationErrorMessage, '');
+	}
+
+	public set validationErrorMessage(newValue: string) {
+		this.setPropertyFromUI<azdata.InputBoxProperties, string>((props, value) => props.validationErrorMessage = value, newValue);
 	}
 }

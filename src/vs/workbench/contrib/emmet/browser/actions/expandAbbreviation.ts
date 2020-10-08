@@ -9,7 +9,7 @@ import { EditorContextKeys } from 'vs/editor/common/editorContextKeys';
 import { KeyCode } from 'vs/base/common/keyCodes';
 import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
 import { KeybindingWeight } from 'vs/platform/keybinding/common/keybindingsRegistry';
-import { MenuId } from 'vs/platform/actions/common/actions';
+// import { MenuId } from 'vs/platform/actions/common/actions';
 
 class ExpandAbbreviationAction extends EmmetEditorAction {
 
@@ -29,13 +29,12 @@ class ExpandAbbreviationAction extends EmmetEditorAction {
 				),
 				weight: KeybindingWeight.EditorContrib
 			},
-			// {{SQL CARBON EDIT}} - Remove from menu
-			// menubarOpts: {
-			// 	menuId: MenuId.MenubarEditMenu,
-			// 	group: '5_insert',
-			// 	title: nls.localize({ key: 'miEmmetExpandAbbreviation', comment: ['&& denotes a mnemonic'] }, "Emmet: E&&xpand Abbreviation"),
-			// 	order: 3
-			// }
+			/*menuOpts: { {{SQL CARBON EDIT}} - Remove from menu
+				menuId: MenuId.MenubarEditMenu,
+				group: '5_insert',
+				title: nls.localize({ key: 'miEmmetExpandAbbreviation', comment: ['&& denotes a mnemonic'] }, "Emmet: E&&xpand Abbreviation"),
+				order: 3
+			}*/
 		});
 
 	}

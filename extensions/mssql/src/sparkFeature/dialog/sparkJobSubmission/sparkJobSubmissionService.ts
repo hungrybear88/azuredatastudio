@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as os from 'os';
 import * as nls from 'vscode-nls';
 const localize = nls.loadMessageBundle();
@@ -12,20 +10,9 @@ import * as constants from '../../../constants';
 import { SqlClusterConnection } from '../../../objectExplorerNodeProvider/connection';
 import * as utils from '../../../utils';
 import * as auth from '../../../util/auth';
+import * as request from 'request-light';
 
 export class SparkJobSubmissionService {
-	private _requestPromise: (args: any) => any;
-
-	constructor(
-		requestService?: (args: any) => any) {
-		if (requestService) {
-			// this is to fake the request service for test.
-			this._requestPromise = requestService;
-		} else {
-			this._requestPromise = require('request-promise');
-		}
-	}
-
 	public async submitBatchJob(submissionArgs: SparkJobSubmissionInput): Promise<string> {
 		try {
 			let livyUrl: string = `https://${submissionArgs.host}:${submissionArgs.port}${submissionArgs.livyPath}/`;
@@ -33,13 +20,11 @@ export class SparkJobSubmissionService {
 			// Get correct authentication headers
 			let headers = await this.getAuthenticationHeaders(submissionArgs);
 
-			let options = {
-				uri: livyUrl,
-				method: 'POST',
-				json: true,
-				// TODO, change it back after service's authentication changed.
-				rejectUnauthorized: false,
-				body: {
+			let options: request.XHROptions = {
+				url: livyUrl,
+				type: 'POST',
+				strictSSL: !auth.getIgnoreSslVerificationConfigSetting(),
+				data: {
 					file: submissionArgs.sparkFile,
 					proxyUser: submissionArgs.user,
 					className: submissionArgs.mainClass,
@@ -53,7 +38,7 @@ export class SparkJobSubmissionService {
 			if (submissionArgs.jobArguments && submissionArgs.jobArguments.trim()) {
 				let argsList = submissionArgs.jobArguments.split(' ');
 				if (argsList.length > 0) {
-					options.body['args'] = argsList;
+					options.data['args'] = argsList;
 				}
 			}
 
@@ -61,7 +46,7 @@ export class SparkJobSubmissionService {
 			if (submissionArgs.jarFileList && submissionArgs.jarFileList.trim()) {
 				let jarList = submissionArgs.jarFileList.split(';');
 				if (jarList.length > 0) {
-					options.body['jars'] = jarList;
+					options.data['jars'] = jarList;
 				}
 			}
 
@@ -69,7 +54,7 @@ export class SparkJobSubmissionService {
 			if (submissionArgs.pyFileList && submissionArgs.pyFileList.trim()) {
 				let pyList = submissionArgs.pyFileList.split(';');
 				if (pyList.length > 0) {
-					options.body['pyFiles'] = pyList;
+					options.data['pyFiles'] = pyList;
 				}
 			}
 
@@ -77,17 +62,23 @@ export class SparkJobSubmissionService {
 			if (submissionArgs.otherFileList && submissionArgs.otherFileList.trim()) {
 				let otherList = submissionArgs.otherFileList.split(';');
 				if (otherList.length > 0) {
-					options.body['files'] = otherList;
+					options.data['files'] = otherList;
 				}
 			}
 
-			const response = await this._requestPromise(options);
+			options.data = JSON.stringify(options.data);
+
+			// Note this is currently required to be called each time since request-light is overwriting
+			// the setting passed in through the options. If/when that gets fixed this can be removed
+			request.configure(null, !auth.getIgnoreSslVerificationConfigSetting());
+
+			const response = JSON.parse((await request.xhr(options)).responseText);
 			if (response && utils.isValidNumber(response.id)) {
 				return response.id;
 			}
 
-			return Promise.reject(new Error(localize('sparkJobSubmission_LivyNoBatchIdReturned',
-				'No Spark job batch id is returned from response.{0}[Error] {1}', os.EOL, JSON.stringify(response))));
+			return Promise.reject(new Error(localize('sparkJobSubmission.LivyNoBatchIdReturned',
+				"No Spark job batch id is returned from response.{0}[Error] {1}", os.EOL, JSON.stringify(response))));
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -110,22 +101,25 @@ export class SparkJobSubmissionService {
 			let livyUrl = `https://${submissionArgs.host}:${submissionArgs.port}${submissionArgs.livyPath}/${livyBatchId}/log`;
 			let headers = await this.getAuthenticationHeaders(submissionArgs);
 
-			let options = {
-				uri: livyUrl,
-				method: 'GET',
-				json: true,
-				rejectUnauthorized: false,
+			let options: request.XHROptions = {
+				url: livyUrl,
+				type: 'GET',
+				strictSSL: !auth.getIgnoreSslVerificationConfigSetting(),
 				// authentication headers
 				headers: headers
 			};
 
-			const response = await this._requestPromise(options);
+			// Note this is currently required to be called each time since request-light is overwriting
+			// the setting passed in through the options. If/when that gets fixed this can be removed
+			request.configure(null, !auth.getIgnoreSslVerificationConfigSetting());
+
+			const response = JSON.parse((await request.xhr(options)).responseText);
 			if (response && response.log) {
 				return this.extractYarnAppIdFromLog(response.log);
 			}
 
-			return Promise.reject(localize('sparkJobSubmission_LivyNoLogReturned',
-				'No log is returned within response.{0}[Error] {1}', os.EOL, JSON.stringify(response)));
+			return Promise.reject(localize('sparkJobSubmission.LivyNoLogReturned',
+				"No log is returned within response.{0}[Error] {1}", os.EOL, JSON.stringify(response)));
 		} catch (error) {
 			return Promise.reject(error);
 		}

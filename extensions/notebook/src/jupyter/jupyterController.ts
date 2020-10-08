@@ -19,18 +19,26 @@ import { IPrompter, QuestionTypes, IQuestion } from '../prompts/question';
 
 import { AppContext } from '../common/appContext';
 import { ApiWrapper } from '../common/apiWrapper';
-import { LocalJupyterServerManager } from './jupyterServerManager';
+import { LocalJupyterServerManager, ServerInstanceFactory } from './jupyterServerManager';
 import { NotebookCompletionItemProvider } from '../intellisense/completionItemProvider';
 import { JupyterNotebookProvider } from './jupyterNotebookProvider';
-import { ConfigurePythonDialog } from '../dialog/configurePythonDialog';
+import { ConfigurePythonWizard } from '../dialog/configurePython/configurePythonWizard';
 import CodeAdapter from '../prompts/adapter';
 import { ManagePackagesDialog } from '../dialog/managePackages/managePackagesDialog';
+import { IPackageManageProvider } from '../types';
+import { LocalPipPackageManageProvider } from './localPipPackageManageProvider';
+import { LocalCondaPackageManageProvider } from './localCondaPackageManageProvider';
+import { ManagePackagesDialogModel, ManagePackageDialogOptions } from '../dialog/managePackages/managePackagesDialogModel';
+import { PiPyClient } from './pipyClient';
+import { ConfigurePythonDialog } from '../dialog/configurePython/configurePythonDialog';
 
 let untitledCounter = 0;
 
 export class JupyterController implements vscode.Disposable {
 	private _jupyterInstallation: JupyterServerInstallation;
 	private _notebookInstances: IServerInstance[] = [];
+	private _serverInstanceFactory: ServerInstanceFactory = new ServerInstanceFactory();
+	private _packageManageProviders = new Map<string, IPackageManageProvider>();
 
 	private outputChannel: vscode.OutputChannel;
 	private prompter: IPrompter;
@@ -75,7 +83,7 @@ export class JupyterController implements vscode.Disposable {
 		});
 
 		this.apiWrapper.registerCommand(constants.jupyterReinstallDependenciesCommand, () => { return this.handleDependenciesReinstallation(); });
-		this.apiWrapper.registerCommand(constants.jupyterManagePackages, () => { return this.doManagePackages(); });
+		this.apiWrapper.registerCommand(constants.jupyterManagePackages, async (args) => { return this.doManagePackages(args); });
 		this.apiWrapper.registerCommand(constants.jupyterConfigurePython, () => { return this.doConfigurePython(this._jupyterInstallation); });
 
 		let supportedFileFilter: vscode.DocumentFilter[] = [
@@ -84,6 +92,7 @@ export class JupyterController implements vscode.Disposable {
 		let notebookProvider = this.registerNotebookProvider();
 		this.extensionContext.subscriptions.push(this.apiWrapper.registerCompletionItemProvider(supportedFileFilter, new NotebookCompletionItemProvider(notebookProvider)));
 
+		this.registerDefaultPackageManageProviders();
 		return true;
 	}
 
@@ -92,7 +101,8 @@ export class JupyterController implements vscode.Disposable {
 			documentPath: documentUri.fsPath,
 			jupyterInstallation: this._jupyterInstallation,
 			extensionContext: this.extensionContext,
-			apiWrapper: this.apiWrapper
+			apiWrapper: this.apiWrapper,
+			factory: this._serverInstanceFactory
 		}));
 		azdata.nb.registerNotebookProvider(notebookProvider);
 		return notebookProvider;
@@ -108,7 +118,7 @@ export class JupyterController implements vscode.Disposable {
 
 	public deactivate(): void {
 		// Shutdown any open notebooks
-		this._notebookInstances.forEach(instance => { instance.stop(); });
+		this._notebookInstances.forEach(async (instance) => { await instance.stop(); });
 	}
 
 	// EVENT HANDLERS //////////////////////////////////////////////////////
@@ -117,7 +127,7 @@ export class JupyterController implements vscode.Disposable {
 	}
 
 	private async handleOpenNotebookTask(profile: azdata.IConnectionProfile): Promise<void> {
-		let notebookFileTypeName = localize('notebookFileType', 'Notebooks');
+		let notebookFileTypeName = localize('notebookFileType', "Notebooks");
 		let filter: { [key: string]: Array<string> } = {};
 		filter[notebookFileTypeName] = ['ipynb'];
 		let uris = await this.apiWrapper.showOpenDialog({
@@ -130,7 +140,7 @@ export class JupyterController implements vscode.Disposable {
 			// Verify this is a .ipynb file since this isn't actually filtered on Mac/Linux
 			if (path.extname(fileUri.fsPath) !== '.ipynb') {
 				// in the future might want additional supported types
-				this.apiWrapper.showErrorMessage(localize('unsupportedFileType', 'Only .ipynb Notebooks are supported'));
+				this.apiWrapper.showErrorMessage(localize('unsupportedFileType', "Only .ipynb Notebooks are supported"));
 			} else {
 				await azdata.nb.showNotebookDocument(fileUri, {
 					connectionProfile: profile,
@@ -189,14 +199,23 @@ export class JupyterController implements vscode.Disposable {
 	private async confirmReinstall(): Promise<boolean> {
 		return await this.prompter.promptSingle<boolean>(<IQuestion>{
 			type: QuestionTypes.confirm,
-			message: localize('confirmReinstall', 'Are you sure you want to reinstall?'),
+			message: localize('confirmReinstall', "Are you sure you want to reinstall?"),
 			default: true
 		});
 	}
 
-	public doManagePackages(): void {
+	public async doManagePackages(options?: ManagePackageDialogOptions): Promise<void> {
 		try {
-			let packagesDialog = new ManagePackagesDialog(this._jupyterInstallation);
+			if (!options) {
+				options = {
+					defaultLocation: constants.localhostName,
+					defaultProviderId: LocalPipPackageManageProvider.ProviderId
+				};
+			}
+			let model = new ManagePackagesDialogModel(this._jupyterInstallation, this._packageManageProviders, options);
+
+			await model.init();
+			let packagesDialog = new ManagePackagesDialog(model);
 			packagesDialog.showDialog();
 		} catch (error) {
 			let message = utils.getErrorMessage(error);
@@ -204,11 +223,48 @@ export class JupyterController implements vscode.Disposable {
 		}
 	}
 
+	/**
+	 * Register a package provider
+	 * @param providerId Provider Id
+	 * @param packageManageProvider Provider instance
+	 */
+	public registerPackageManager(providerId: string, packageManageProvider: IPackageManageProvider): void {
+		if (packageManageProvider) {
+			if (!this._packageManageProviders.has(providerId)) {
+				this._packageManageProviders.set(providerId, packageManageProvider);
+			} else {
+				throw Error(`Package manager provider is already registered. provider id: ${providerId}`);
+			}
+		}
+	}
+
+	/**
+	 * Returns the list of registered providers
+	 */
+	public get packageManageProviders(): Map<string, IPackageManageProvider> {
+		return this._packageManageProviders;
+	}
+
+	private registerDefaultPackageManageProviders(): void {
+		this.registerPackageManager(LocalPipPackageManageProvider.ProviderId, new LocalPipPackageManageProvider(this._jupyterInstallation, new PiPyClient()));
+		this.registerPackageManager(LocalCondaPackageManageProvider.ProviderId, new LocalCondaPackageManageProvider(this._jupyterInstallation));
+	}
+
 	public doConfigurePython(jupyterInstaller: JupyterServerInstallation): void {
-		let pythonDialog = new ConfigurePythonDialog(this.apiWrapper, jupyterInstaller);
-		pythonDialog.showDialog().catch((err: any) => {
-			this.apiWrapper.showErrorMessage(utils.getErrorMessage(err));
-		});
+		if (jupyterInstaller.previewFeaturesEnabled) {
+			let pythonWizard = new ConfigurePythonWizard(this.apiWrapper, jupyterInstaller);
+			pythonWizard.start().catch((err: any) => {
+				this.apiWrapper.showErrorMessage(utils.getErrorMessage(err));
+			});
+			pythonWizard.setupComplete.catch((err: any) => {
+				this.apiWrapper.showErrorMessage(utils.getErrorMessage(err));
+			});
+		} else {
+			let pythonDialog = new ConfigurePythonDialog(this.apiWrapper, jupyterInstaller);
+			pythonDialog.showDialog().catch((err: any) => {
+				this.apiWrapper.showErrorMessage(utils.getErrorMessage(err));
+			});
+		}
 	}
 
 	public get jupyterInstallation() {

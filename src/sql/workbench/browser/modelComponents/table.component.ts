@@ -10,10 +10,8 @@ import {
 } from '@angular/core';
 
 import * as azdata from 'azdata';
-import { ColumnSizingMode } from 'sql/workbench/api/common/sqlExtHostTypes';
 
 import { ComponentBase } from 'sql/workbench/browser/modelComponents/componentBase';
-import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/workbench/browser/modelComponents/interfaces';
 
 import { Table } from 'sql/base/browser/ui/table/table';
 import { TableDataView } from 'sql/base/browser/ui/table/tableDataView';
@@ -26,6 +24,15 @@ import { Emitter, Event as vsEvent } from 'vs/base/common/event';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { KeyMod, KeyCode } from 'vs/base/common/keyCodes';
 import { slickGridDataItemColumnValueWithNoData, textFormatter } from 'sql/base/browser/ui/table/formatters';
+import { isUndefinedOrNull } from 'vs/base/common/types';
+import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/platform/dashboard/browser/interfaces';
+import { convertSizeToNumber } from 'sql/base/browser/dom';
+
+export enum ColumnSizingMode {
+	ForceFit = 0,	// all columns will be sized to fit in viewable space, no horiz scroll bar
+	AutoFit = 1,	// columns will be ForceFit up to a certain number; currently 3.  At 4 or more the behavior will switch to NO force fit
+	DataFit = 2		// columns use sizing based on cell data, horiz scroll bar present if more cells than visible in view area
+}
 
 @Component({
 	selector: 'modelview-table',
@@ -141,9 +148,9 @@ export default class TableComponent extends ComponentBase implements IComponent,
 				});
 			}));
 
-			this._table.grid.onKeyDown.subscribe((e: KeyboardEvent) => {
+			this._table.grid.onKeyDown.subscribe((e: DOMEvent) => {
 				if (this.moveFocusOutWithTab) {
-					let event = new StandardKeyboardEvent(e);
+					let event = new StandardKeyboardEvent(e as KeyboardEvent);
 					if (event.equals(KeyMod.Shift | KeyCode.Tab)) {
 						e.stopImmediatePropagation();
 						(<HTMLElement>(<HTMLElement>this._inputContainer.nativeElement).previousElementSibling).focus();
@@ -176,8 +183,8 @@ export default class TableComponent extends ComponentBase implements IComponent,
 	}
 
 	private layoutTable(): void {
-		let width: number = this.convertSizeToNumber(this.width);
-		let height: number = this.convertSizeToNumber(this.height);
+		let width: number = convertSizeToNumber(this.width);
+		let height: number = convertSizeToNumber(this.height);
 		let forceFit: boolean = true;
 
 		// convert the tri-state viewmodel columnSizingMode to be either true or false for SlickGrid
@@ -251,12 +258,29 @@ export default class TableComponent extends ComponentBase implements IComponent,
 			this._table.ariaRole = this.ariaRole;
 		}
 
-		if (this.focused) {
-			this._table.focus();
+		if (this.ariaLabel) {
+			this._table.ariaLabel = this.ariaLabel;
+		}
+
+		if (this.updateCells !== undefined) {
+			this.updateTableCells(this.updateCells);
 		}
 
 		this.layoutTable();
 		this.validate();
+	}
+
+	private updateTableCells(cellInfos): void {
+		cellInfos.forEach((cellInfo) => {
+			if (isUndefinedOrNull(cellInfo.column) || isUndefinedOrNull(cellInfo.row) || cellInfo.row < 0 || cellInfo.row > this.data.length) {
+				return;
+			}
+
+			const checkInfo: azdata.CheckBoxCell = cellInfo as azdata.CheckBoxCell;
+			if (checkInfo) {
+				this._checkboxColumns[checkInfo.columnName].reactiveCheckboxCheck(checkInfo.row, checkInfo.checked);
+			}
+		});
 	}
 
 	private createCheckBoxPlugin(col: any, index: number) {
@@ -290,6 +314,15 @@ export default class TableComponent extends ComponentBase implements IComponent,
 		this._table.registerPlugin(checkboxSelectColumn);
 		this._table.columns = this._tableColumns;
 		this._table.autosizeColumns();
+	}
+
+	public focus(): void {
+		if (this._table.grid.getDataLength() > 0) {
+			if (!this._table.grid.getActiveCell()) {
+				this._table.grid.setActiveCell(0, 0);
+			}
+			this._table.grid.getActiveCellNode().focus();
+		}
 	}
 
 	// CSS-bound properties
@@ -338,10 +371,6 @@ export default class TableComponent extends ComponentBase implements IComponent,
 		return this.getPropertyOrDefault<azdata.TableComponentProperties, number>((props) => props.ariaColumnCount, -1);
 	}
 
-	public get ariaRole(): string {
-		return this.getPropertyOrDefault<azdata.TableComponentProperties, string>((props) => props.ariaRole, undefined);
-	}
-
 	public set moveFocusOutWithTab(newValue: boolean) {
 		this.setPropertyFromUI<azdata.TableComponentProperties, boolean>((props, value) => props.moveFocusOutWithTab = value, newValue);
 	}
@@ -350,11 +379,11 @@ export default class TableComponent extends ComponentBase implements IComponent,
 		return this.getPropertyOrDefault<azdata.TableComponentProperties, boolean>((props) => props.moveFocusOutWithTab, false);
 	}
 
-	public get focused(): boolean {
-		return this.getPropertyOrDefault<azdata.RadioButtonProperties, boolean>((props) => props.focused, false);
+	public get updateCells(): azdata.TableCell[] {
+		return this.getPropertyOrDefault<azdata.TableComponentProperties, azdata.TableCell[]>((props) => props.updateCells, undefined);
 	}
 
-	public set focused(newValue: boolean) {
-		this.setPropertyFromUI<azdata.RadioButtonProperties, boolean>((properties, value) => { properties.focused = value; }, newValue);
+	public set updateCells(newValue: azdata.TableCell[]) {
+		this.setPropertyFromUI<azdata.TableComponentProperties, azdata.TableCell[]>((properties, value) => { properties.updateCells = value; }, newValue);
 	}
 }

@@ -10,8 +10,29 @@ import { IConnectionProfileGroup, ConnectionProfileGroup } from 'sql/platform/co
 import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
 import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { ConnectionManagementInfo } from 'sql/platform/connection/common/connectionManagementInfo';
-import { IServerGroupDialogCallbacks } from 'sql/platform/serverGroup/common/serverGroupController';
-import { ConnectionProviderProperties } from 'sql/workbench/parts/connection/common/connectionProviderExtension';
+import { ConnectionProviderProperties } from 'sql/platform/capabilities/common/capabilitiesService';
+
+/**
+ * A range in the editor. This interface is suitable for serialization.
+ */
+export interface IRange {
+	/**
+	 * Line number on which the range starts (starts at 1).
+	 */
+	readonly startLineNumber: number;
+	/**
+	 * Column on which the range starts in line `startLineNumber` (starts at 1).
+	 */
+	readonly startColumn: number;
+	/**
+	 * Line number on which the range ends.
+	 */
+	readonly endLineNumber: number;
+	/**
+	 * Column on which the range ends in line `endLineNumber`.
+	 */
+	readonly endColumn: number;
+}
 
 /**
  * Options for the actions that could happen after connecting is complete
@@ -74,6 +95,14 @@ export interface IConnectionManagementService {
 	onDisconnect: Event<IConnectionParams>;
 	onConnectionChanged: Event<IConnectionParams>;
 	onLanguageFlavorChanged: Event<azdata.DidChangeLanguageFlavorParams>;
+
+	// Properties
+	providerNameToDisplayNameMap: { [providerDisplayName: string]: string };
+
+	/**
+	 * Opens the edit connection dialog to change connection.
+	 */
+	showEditConnectionDialog(model: IConnectionProfile): Promise<void>;
 
 	/**
 	 * Opens the connection dialog to create new connection
@@ -180,6 +209,8 @@ export interface IConnectionManagementService {
 	getConnectionInfo(fileUri: string): ConnectionManagementInfo;
 
 	getDefaultProviderId(): string;
+
+	getUniqueConnectionProvidersByNameMap(providerNameToDisplayNameMap: { [providerDisplayName: string]: string }): { [providerDisplayName: string]: string };
 
 	/**
 	 * Cancels the connection
@@ -293,9 +324,11 @@ export interface INewConnectionParams {
 	connectionType: ConnectionType;
 	input?: IConnectableInput;
 	runQueryOnCompletion?: RunQueryOnConnectionMode;
-	querySelection?: azdata.ISelectionData;
+	queryRange?: IRange;
 	showDashboard?: boolean;
 	providers?: string[];
+	isEditConnection?: boolean;
+	oldProfileId?: string; // used for edit connection
 }
 
 export interface IConnectableInput {

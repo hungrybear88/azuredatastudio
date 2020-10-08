@@ -8,10 +8,8 @@
 const gulp = require('gulp');
 const filter = require('gulp-filter');
 const es = require('event-stream');
-const gulptslint = require('gulp-tslint');
 const gulpeslint = require('gulp-eslint');
 const tsfmt = require('typescript-formatter');
-const tslint = require('tslint');
 const VinylFile = require('vinyl');
 const vfs = require('vinyl-fs');
 const path = require('path');
@@ -35,7 +33,9 @@ const all = [
 	'scripts/**/*',
 	'src/**/*',
 	'test/**/*',
-	'!**/node_modules/**'
+	'!test/**/out/**',
+	'!**/node_modules/**',
+	'!build/actions/**/*.js' // {{ SQL CARBON EDIT }}
 ];
 
 const indentationFilter = [
@@ -55,11 +55,12 @@ const indentationFilter = [
 	'!src/vs/base/common/marked/marked.js',
 	'!src/vs/base/node/terminateProcess.sh',
 	'!src/vs/base/node/cpuUsage.sh',
-	'!test/assert.js',
+	'!test/unit/assert.js',
 
 	// except specific folders
 	'!test/automation/out/**',
 	'!test/smoke/out/**',
+	'!extensions/typescript-language-features/test-workspace/**',
 	'!extensions/vscode-api-tests/testWorkspace/**',
 	'!extensions/vscode-api-tests/testWorkspace2/**',
 	'!build/monaco/**',
@@ -67,12 +68,10 @@ const indentationFilter = [
 
 	// except multiple specific files
 	'!**/package.json',
-	'!**/package-lock.json', // {{SQL CARBON EDIT}}
 	'!**/yarn.lock',
 	'!**/yarn-error.log',
 
 	// except multiple specific folders
-	'!**/octicons/**',
 	'!**/codicon/**',
 	'!**/fixtures/**',
 	'!**/lib/**',
@@ -86,8 +85,8 @@ const indentationFilter = [
 	'!src/vs/*/**/*.d.ts',
 	'!src/typings/**/*.d.ts',
 	'!extensions/**/*.d.ts',
-	'!**/*.{svg,exe,png,bmp,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,template,yaml,yml,d.ts.recipe,ico,icns}',
-	'!build/{lib,tslintRules,download}/**/*.js',
+	'!**/*.{svg,exe,png,bmp,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,template,yaml,yml,d.ts.recipe,ico,icns,plist}',
+	'!build/{lib,download,darwin}/**/*.js',
 	'!build/**/*.sh',
 	'!build/azure-pipelines/**/*.js',
 	'!build/azure-pipelines/**/*.config',
@@ -97,14 +96,23 @@ const indentationFilter = [
 	'!**/*.dockerfile',
 	'!extensions/markdown-language-features/media/*.js',
 	// {{SQL CARBON EDIT}}
-	'!**/*.{xlf,docx,sql,vsix,bacpac,ipynb}',
+	'!build/actions/**/*.js',
+	'!**/*.{xlf,docx,sql,vsix,bacpac,ipynb,jpg}',
 	'!extensions/mssql/sqltoolsservice/**',
 	'!extensions/import/flatfileimportservice/**',
 	'!extensions/admin-tool-ext-win/ssmsmin/**',
 	'!extensions/resource-deployment/notebooks/**',
 	'!extensions/mssql/notebooks/**',
+	'!extensions/integration-tests/testData/**',
+	'!extensions/arc/src/controller/generated/**',
+	'!extensions/sql-database-projects/resources/templates/*.xml',
+	'!extensions/sql-database-projects/src/test/baselines/*.xml',
+	'!extensions/sql-database-projects/src/test/baselines/*.json',
+	'!extensions/sql-database-projects/src/test/baselines/*.sqlproj',
+	'!extensions/sql-database-projects/BuildDirectory/SystemDacpacs/**',
 	'!extensions/big-data-cluster/src/bigDataCluster/controller/apiGenerated.ts',
-	'!extensions/big-data-cluster/src/bigDataCluster/controller/clusterApiGenerated2.ts'
+	'!extensions/big-data-cluster/src/bigDataCluster/controller/clusterApiGenerated2.ts',
+	'!resources/linux/snap/electron-launch'
 ];
 
 const copyrightFilter = [
@@ -125,7 +133,7 @@ const copyrightFilter = [
 	'!**/*.opts',
 	'!**/*.disabled',
 	'!**/*.code-workspace',
-	'!**/promise-polyfill/polyfill.js',
+	'!**/*.js.map',
 	'!build/**/*.init',
 	'!resources/linux/snap/snapcraft.yaml',
 	'!resources/linux/snap/electron-launch',
@@ -135,29 +143,30 @@ const copyrightFilter = [
 	'!extensions/html-language-features/server/src/modes/typescript/*',
 	'!extensions/*/server/bin/*',
 	'!src/vs/editor/test/node/classification/typescript-test.ts',
+	'!scripts/code-web.js',
 	// {{SQL CARBON EDIT}}
 	'!extensions/notebook/src/intellisense/text.ts',
 	'!extensions/mssql/src/hdfs/webhdfs.ts',
-	'!src/sql/workbench/parts/notebook/browser/outputs/tableRenderers.ts',
-	'!src/sql/workbench/parts/notebook/common/models/url.ts',
-	'!src/sql/workbench/parts/notebook/browser/models/renderMimeInterfaces.ts',
-	'!src/sql/workbench/parts/notebook/browser/models/outputProcessor.ts',
-	'!src/sql/workbench/parts/notebook/browser/models/mimemodel.ts',
-	'!src/sql/workbench/parts/notebook/browser/cellViews/media/*.css',
+	'!src/sql/workbench/contrib/notebook/browser/outputs/tableRenderers.ts',
+	'!src/sql/workbench/contrib/notebook/common/models/url.ts',
+	'!src/sql/workbench/services/notebook/browser/outputs/renderMimeInterfaces.ts',
+	'!src/sql/workbench/contrib/notebook/browser/models/outputProcessor.ts',
+	'!src/sql/workbench/services/notebook/browser/outputs/mimemodel.ts',
+	'!src/sql/workbench/contrib/notebook/browser/cellViews/media/*.css',
 	'!src/sql/base/browser/ui/table/plugins/rowSelectionModel.plugin.ts',
 	'!src/sql/base/browser/ui/table/plugins/rowDetailView.ts',
 	'!src/sql/base/browser/ui/table/plugins/headerFilter.plugin.ts',
 	'!src/sql/base/browser/ui/table/plugins/checkboxSelectColumn.plugin.ts',
 	'!src/sql/base/browser/ui/table/plugins/cellSelectionModel.plugin.ts',
 	'!src/sql/base/browser/ui/table/plugins/autoSizeColumns.plugin.ts',
-	'!src/sql/workbench/parts/notebook/browser/outputs/sanitizer.ts',
-	'!src/sql/workbench/parts/notebook/browser/outputs/renderers.ts',
-	'!src/sql/workbench/parts/notebook/browser/outputs/registry.ts',
-	'!src/sql/workbench/parts/notebook/browser/outputs/factories.ts',
-	'!src/sql/workbench/parts/notebook/common/models/nbformat.ts',
+	'!src/sql/workbench/services/notebook/browser/outputs/sanitizer.ts',
+	'!src/sql/workbench/contrib/notebook/browser/outputs/renderers.ts',
+	'!src/sql/workbench/services/notebook/browser/outputs/registry.ts',
+	'!src/sql/workbench/services/notebook/browser/outputs/factories.ts',
+	'!src/sql/workbench/services/notebook/common/nbformat.ts',
 	'!extensions/markdown-language-features/media/tomorrow.css',
 	'!src/sql/workbench/browser/modelComponents/media/highlight.css',
-	'!src/sql/workbench/parts/notebook/electron-browser/cellViews/media/highlight.css',
+	'!src/sql/workbench/contrib/notebook/electron-browser/cellViews/media/highlight.css',
 	'!extensions/mssql/sqltoolsservice/**',
 	'!extensions/import/flatfileimportservice/**',
 	'!extensions/notebook/src/prompts/**',
@@ -170,7 +179,7 @@ const copyrightFilter = [
 	'!**/*.bacpac'
 ];
 
-const eslintFilter = [
+const jsHygieneFilter = [
 	'src/**/*.js',
 	'build/gulpfile.*.js',
 	'!src/vs/loader.js',
@@ -183,7 +192,10 @@ const eslintFilter = [
 	'!**/test/**'
 ];
 
-const tslintBaseFilter = [
+const tsHygieneFilter = [
+	'src/**/*.ts',
+	'test/**/*.ts',
+	'extensions/**/*.ts',
 	'!**/fixtures/**',
 	'!**/typings/**',
 	'!**/node_modules/**',
@@ -193,33 +205,9 @@ const tslintBaseFilter = [
 	'!extensions/**/*.test.ts',
 	'!extensions/html-language-features/server/lib/jquery.d.ts',
 	'!extensions/big-data-cluster/src/bigDataCluster/controller/apiGenerated.ts', // {{SQL CARBON EDIT}},
-	'!extensions/big-data-cluster/src/bigDataCluster/controller/tokenApiGenerated.ts' // {{SQL CARBON EDIT}}
-];
-
-const sqlFilter = ['src/sql/**']; // {{SQL CARBON EDIT}}
-
-const tslintCoreFilter = [
-	'src/**/*.ts',
-	'test/**/*.ts',
-	'!extensions/**/*.ts',
-	'!test/automation/**',
-	'!test/smoke/**',
-	...tslintBaseFilter
-];
-
-const tslintExtensionsFilter = [
-	'extensions/**/*.ts',
-	'!src/**/*.ts',
-	'!test/**/*.ts',
-	'test/automation/**/*.ts',
-	...tslintBaseFilter
-];
-
-const tslintHygieneFilter = [
-	'src/**/*.ts',
-	'test/**/*.ts',
-	'extensions/**/*.ts',
-	...tslintBaseFilter
+	'!extensions/big-data-cluster/src/bigDataCluster/controller/tokenApiGenerated.ts', // {{SQL CARBON EDIT}},
+	'!src/vs/workbench/services/themes/common/textMateScopeMatcher.ts', // {{SQL CARBON EDIT}} skip this because we have no plans on touching this and its not ours
+	'!src/vs/workbench/contrib/extensions/browser/extensionRecommendationsService.ts' // {{SQL CARBON EDIT}} skip this because known issue
 ];
 
 const copyrightHeaderLines = [
@@ -231,27 +219,17 @@ const copyrightHeaderLines = [
 
 gulp.task('eslint', () => {
 	return vfs.src(all, { base: '.', follow: true, allowEmpty: true })
-		.pipe(filter(eslintFilter))
-		.pipe(gulpeslint('src/.eslintrc'))
+		.pipe(filter(jsHygieneFilter.concat(tsHygieneFilter)))
+		.pipe(gulpeslint({
+			configFile: '.eslintrc.json',
+			rulePaths: ['./build/lib/eslint']
+		}))
 		.pipe(gulpeslint.formatEach('compact'))
-		.pipe(gulpeslint.failAfterError());
-});
-
-gulp.task('tslint', () => {
-	return es.merge([
-
-		// Core: include type information (required by certain rules like no-nodejs-globals)
-		vfs.src(all, { base: '.', follow: true, allowEmpty: true })
-			.pipe(filter(tslintCoreFilter))
-			.pipe(gulptslint.default({ rulesDirectory: 'build/lib/tslint', program: tslint.Linter.createProgram('src/tsconfig.json') }))
-			.pipe(gulptslint.default.report({ emitError: true })),
-
-		// Exenstions: do not include type information
-		vfs.src(all, { base: '.', follow: true, allowEmpty: true })
-			.pipe(filter(tslintExtensionsFilter))
-			.pipe(gulptslint.default({ rulesDirectory: 'build/lib/tslint' }))
-			.pipe(gulptslint.default.report({ emitError: true }))
-	]).pipe(es.through());
+		.pipe(gulpeslint.results(results => {
+			if (results.warningCount > 0 || results.errorCount > 0) {
+				throw new Error('eslint failed with warnings and/or errors');
+			}
+		}));
 });
 
 function checkPackageJSON(actualPath) {
@@ -273,7 +251,7 @@ function checkPackageJSON(actualPath) {
 
 const checkPackageJSONTask = task.define('check-package-json', () => {
 	return gulp.src('package.json')
-		.pipe(es.through(function() {
+		.pipe(es.through(function () {
 			checkPackageJSON.call(this, 'remote/package.json');
 			checkPackageJSON.call(this, 'remote/web/package.json');
 		}));
@@ -340,8 +318,6 @@ function hygiene(some) {
 			replace: undefined,
 			tsconfig: undefined,
 			tsconfigFile: undefined,
-			tslint: undefined,
-			tslintFile: undefined,
 			tsfmtFile: undefined,
 			vscode: undefined,
 			vscodeFile: undefined
@@ -350,7 +326,7 @@ function hygiene(some) {
 			let formatted = result.dest.replace(/\r\n/gm, '\n');
 
 			if (original !== formatted) {
-				console.error("File not formatted. Run the 'Format Document' command to fix it:", file.relative);
+				console.error('File not formatted. Run the \'Format Document\' command to fix it:', file.relative);
 				errorCount++;
 			}
 			cb(null, file);
@@ -360,32 +336,18 @@ function hygiene(some) {
 		});
 	});
 
-	const tslintConfiguration = tslint.Configuration.findConfiguration('tslint.json', '.');
-	const tslintOptions = { fix: false, formatter: 'json' };
-	const tsLinter = new tslint.Linter(tslintOptions);
-
-	const tsl = es.through(function (file) {
-		const contents = file.contents.toString('utf8');
-		tsLinter.lint(file.relative, contents, tslintConfiguration.results);
-		this.emit('data', file);
-	});
-
 	let input;
 
 	if (Array.isArray(some) || typeof some === 'string' || !some) {
-		input = vfs.src(some || all, { base: '.', follow: true, allowEmpty: true });
+		const options = { base: '.', follow: true, allowEmpty: true };
+		if (some) {
+			input = vfs.src(some, options).pipe(filter(all)); // split this up to not unnecessarily filter all a second time
+		} else {
+			input = vfs.src(all, options);
+		}
 	} else {
 		input = some;
 	}
-
-	const tslintSqlConfiguration = tslint.Configuration.findConfiguration('tslint-sql.json', '.');
-	const tslintSqlOptions = { fix: false, formatter: 'json' };
-	const sqlTsLinter = new tslint.Linter(tslintSqlOptions);
-
-	const sqlTsl = es.through(function (file) { //TODO restore
-		const contents = file.contents.toString('utf8');
-		sqlTsLinter.lint(file.relative, contents, tslintSqlConfiguration.results);
-	});
 
 	const productJsonFilter = filter('product.json', { restore: true });
 
@@ -399,22 +361,21 @@ function hygiene(some) {
 		.pipe(filter(copyrightFilter))
 		.pipe(copyrights);
 
-	let typescript = result
-		.pipe(filter(tslintHygieneFilter))
+	const typescript = result
+		.pipe(filter(tsHygieneFilter))
 		.pipe(formatting);
 
-	if (!process.argv.some(arg => arg === '--skip-tslint')) {
-		typescript = typescript.pipe(tsl);
-		typescript = typescript
-			.pipe(filter(sqlFilter))
-			.pipe(sqlTsl); // {{SQL CARBON EDIT}}
-	}
-
 	const javascript = result
-		.pipe(filter(eslintFilter))
-		.pipe(gulpeslint('src/.eslintrc'))
+		.pipe(filter(jsHygieneFilter.concat(tsHygieneFilter)))
+		.pipe(gulpeslint({
+			configFile: '.eslintrc.json',
+			rulePaths: ['./build/lib/eslint']
+		}))
 		.pipe(gulpeslint.formatEach('compact'))
-		.pipe(gulpeslint.failAfterError());
+		.pipe(gulpeslint.results(results => {
+			errorCount += results.warningCount;
+			errorCount += results.errorCount;
+		}));
 
 	let count = 0;
 	return es.merge(typescript, javascript)
@@ -426,33 +387,6 @@ function hygiene(some) {
 			this.emit('data', data);
 		}, function () {
 			process.stdout.write('\n');
-
-			const tslintResult = tsLinter.getResult();
-			if (tslintResult.failures.length > 0) {
-				for (const failure of tslintResult.failures) {
-					const name = failure.getFileName();
-					const position = failure.getStartPosition();
-					const line = position.getLineAndCharacter().line;
-					const character = position.getLineAndCharacter().character;
-
-					console.error(`${name}:${line + 1}:${character + 1}:${failure.getFailure()}`);
-				}
-				errorCount += tslintResult.failures.length;
-			}
-
-			const sqlTslintResult = sqlTsLinter.getResult();
-			if (sqlTslintResult.failures.length > 0) {
-				for (const failure of sqlTslintResult.failures) {
-					const name = failure.getFileName();
-					const position = failure.getStartPosition();
-					const line = position.getLineAndCharacter().line;
-					const character = position.getLineAndCharacter().character;
-
-					console.error(`${name}:${line + 1}:${character + 1}:${failure.getFailure()}`);
-				}
-				errorCount += sqlTslintResult.failures.length;
-			}
-
 			if (errorCount > 0) {
 				this.emit('error', 'Hygiene failed with ' + errorCount + ' errors. Check \'build/gulpfile.hygiene.js\'.');
 			} else {
@@ -475,7 +409,7 @@ function createGitIndexVinyls(paths) {
 				return e(err);
 			}
 
-			cp.exec(`git show ":${relativePath}"`, { maxBuffer: 2000 * 1024, encoding: 'buffer' }, (err, out) => {
+			cp.exec(`git show :${relativePath}`, { maxBuffer: 2000 * 1024, encoding: 'buffer' }, (err, out) => {
 				if (err) {
 					return e(err);
 				}

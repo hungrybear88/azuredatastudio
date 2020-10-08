@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
-import { IConnectionProfile, IConnectionProfileStore } from 'sql/platform/connection/common/interfaces';
+import { IConnectionProfile, IConnectionProfileStore, ServiceOptionType, ConnectionOptionSpecialType } from 'sql/platform/connection/common/interfaces';
 import * as azdata from 'azdata';
 import * as assert from 'assert';
-import { ConnectionOptionSpecialType, ServiceOptionType } from 'sql/workbench/api/common/sqlExtHostTypes';
 import { TestCapabilitiesService } from 'sql/platform/capabilities/test/common/testCapabilitiesService';
-import { ConnectionProviderProperties } from 'sql/workbench/parts/connection/common/connectionProviderExtension';
 import { mssqlProviderName } from 'sql/platform/connection/common/constants';
+import { ConnectionProviderProperties } from 'sql/platform/capabilities/common/capabilitiesService';
+import { assign } from 'vs/base/common/objects';
 
 suite('SQL ConnectionProfileInfo tests', () => {
 	let msSQLCapabilities: ConnectionProviderProperties;
@@ -26,12 +26,12 @@ suite('SQL ConnectionProfileInfo tests', () => {
 		savePassword: true,
 		groupFullName: 'g2/g2-2',
 		groupId: 'group id',
-		getOptionsKey: undefined,
-		matches: undefined,
+		getOptionsKey: undefined!,
+		matches: undefined!,
 		providerName: mssqlProviderName,
 		options: {},
 		saveProfile: true,
-		id: undefined
+		id: undefined!
 	};
 
 	let storedProfile: IConnectionProfileStore = {
@@ -53,11 +53,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 		let connectionProvider: azdata.ConnectionOption[] = [
 			{
 				name: 'connectionName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.connectionName,
@@ -65,11 +65,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 			},
 			{
 				name: 'serverName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.serverName,
@@ -77,11 +77,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 			},
 			{
 				name: 'databaseName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.databaseName,
@@ -89,11 +89,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 			},
 			{
 				name: 'userName',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.userName,
@@ -101,11 +101,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 			},
 			{
 				name: 'authenticationType',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.authType,
@@ -113,11 +113,11 @@ suite('SQL ConnectionProfileInfo tests', () => {
 			},
 			{
 				name: 'password',
-				displayName: undefined,
-				description: undefined,
-				groupName: undefined,
-				categoryValues: undefined,
-				defaultValue: undefined,
+				displayName: undefined!,
+				description: undefined!,
+				groupName: undefined!,
+				categoryValues: undefined!,
+				defaultValue: undefined!,
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: ConnectionOptionSpecialType.password,
@@ -134,7 +134,7 @@ suite('SQL ConnectionProfileInfo tests', () => {
 	});
 
 	test('set properties should set the values correctly', () => {
-		let conn = new ConnectionProfile(capabilitiesService, undefined);
+		let conn = new ConnectionProfile(capabilitiesService, undefined!);
 		assert.equal(conn.serverName, undefined);
 		conn.connectionName = connectionProfile.connectionName;
 		conn.serverName = connectionProfile.serverName;
@@ -187,7 +187,7 @@ suite('SQL ConnectionProfileInfo tests', () => {
 	});
 
 	test('createFromStoredProfile should set the id to new guid if not set in stored profile', () => {
-		let savedProfile = Object.assign({}, storedProfile, { id: undefined });
+		let savedProfile = assign({}, storedProfile, { id: undefined });
 		let connectionProfile = ConnectionProfile.createFromStoredProfile(savedProfile, capabilitiesService);
 		assert.equal(savedProfile.groupId, connectionProfile.groupId);
 		assert.deepEqual(savedProfile.providerName, connectionProfile.providerName);

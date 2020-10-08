@@ -15,6 +15,7 @@ import { Disposable, DisposableStore } from 'vs/base/common/lifecycle';
 import { Color } from 'vs/base/common/color';
 import { isUndefinedOrNull } from 'vs/base/common/types';
 import * as map from 'vs/base/common/map';
+import { firstIndex } from 'vs/base/common/arrays';
 
 export interface ITabbedPanelStyles {
 	titleActiveForeground?: Color;
@@ -22,6 +23,9 @@ export interface ITabbedPanelStyles {
 	titleInactiveForeground?: Color;
 	focusBorder?: Color;
 	outline?: Color;
+	activeBackgroundForVerticalLayout?: Color;
+	border?: Color;
+	activeTabContrastBorder?: Color;
 }
 
 export interface IPanelOptions {
@@ -68,7 +72,7 @@ export class TabbedPanel extends Disposable {
 	private body: HTMLElement;
 	private parent: HTMLElement;
 	private _actionbar: ActionBar;
-	private _currentDimensions: DOM.Dimension;
+	private _currentDimensions?: DOM.Dimension;
 	private _collapsed = false;
 	private _headerVisible: boolean;
 	private _styleElement: HTMLStyleElement;
@@ -129,7 +133,9 @@ export class TabbedPanel extends Disposable {
 		if (this._tabMap.size > 1 && !this._headerVisible) {
 			this.parent.insertBefore(this.header, this.parent.firstChild);
 			this._headerVisible = true;
-			this.layout(this._currentDimensions);
+			if (this._currentDimensions) {
+				this.layout(this._currentDimensions);
+			}
 		}
 		return tab.identifier as PanelTabIdentifier;
 	}
@@ -171,11 +177,11 @@ export class TabbedPanel extends Disposable {
 				e.stopImmediatePropagation();
 			}
 			if (event.equals(KeyCode.RightArrow)) {
-				let currentIndex = this._tabOrder.findIndex(x => x === tab.tab.identifier);
+				let currentIndex = firstIndex(this._tabOrder, x => x === tab.tab.identifier);
 				this.focusNextTab(currentIndex + 1);
 			}
 			if (event.equals(KeyCode.LeftArrow)) {
-				let currentIndex = this._tabOrder.findIndex(x => x === tab.tab.identifier);
+				let currentIndex = firstIndex(this._tabOrder, x => x === tab.tab.identifier);
 				this.focusNextTab(currentIndex - 1);
 			}
 			if (event.equals(KeyCode.Tab)) {
@@ -191,8 +197,7 @@ export class TabbedPanel extends Disposable {
 
 		const insertBefore = !isUndefinedOrNull(index) ? this.tabList.children.item(index) : undefined;
 		if (insertBefore) {
-			this._tabOrder.copyWithin(index! + 1, index!);
-			this._tabOrder[index!] = tab.tab.identifier;
+			this._tabOrder.splice(index!, 0, tab.tab.identifier);
 			this.tabList.insertBefore(tabHeaderElement, insertBefore);
 		} else {
 			this.tabList.append(tabHeaderElement);
@@ -267,7 +272,7 @@ export class TabbedPanel extends Disposable {
 		}
 		actualTab.disposables.dispose();
 		this._tabMap.delete(tab);
-		let index = this._tabOrder.findIndex(t => t === tab);
+		let index = firstIndex(this._tabOrder, t => t === tab);
 		this._tabOrder.splice(index, 1);
 		if (this._shownTabId === tab) {
 			this._shownTabId = undefined;
@@ -287,7 +292,9 @@ export class TabbedPanel extends Disposable {
 		if (!this.options.showHeaderWhenSingleView && this._tabMap.size === 1 && this._headerVisible) {
 			this.header.remove();
 			this._headerVisible = false;
-			this.layout(this._currentDimensions);
+			if (this._currentDimensions) {
+				this.layout(this._currentDimensions);
+			}
 		}
 	}
 

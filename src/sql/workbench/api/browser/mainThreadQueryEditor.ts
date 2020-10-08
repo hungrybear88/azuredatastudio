@@ -7,14 +7,15 @@ import { SqlExtHostContext, SqlMainContext, ExtHostQueryEditorShape, MainThreadQ
 import { IExtHostContext } from 'vs/workbench/api/common/extHost.protocol';
 import { extHostNamedCustomer } from 'vs/workbench/api/common/extHostCustomers';
 import { IConnectionManagementService, IConnectionCompletionOptions, ConnectionType, RunQueryOnConnectionMode } from 'sql/platform/connection/common/connectionManagement';
-import { QueryEditor } from 'sql/workbench/parts/query/browser/queryEditor';
+import { QueryEditor } from 'sql/workbench/contrib/query/browser/queryEditor';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { Disposable } from 'vs/base/common/lifecycle';
-import { IQueryModelService } from 'sql/platform/query/common/queryModel';
+import { IQueryModelService } from 'sql/workbench/services/query/common/queryModel';
 import * as azdata from 'azdata';
-import { IQueryManagementService } from 'sql/platform/query/common/queryManagement';
+import { IQueryManagementService } from 'sql/workbench/services/query/common/queryManagement';
 import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
+import { ILogService } from 'vs/platform/log/common/log';
 
 @extHostNamedCustomer(SqlMainContext.MainThreadQueryEditor)
 export class MainThreadQueryEditor extends Disposable implements MainThreadQueryEditorShape {
@@ -26,7 +27,8 @@ export class MainThreadQueryEditor extends Disposable implements MainThreadQuery
 		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService,
 		@IQueryModelService private _queryModelService: IQueryModelService,
 		@IEditorService private _editorService: IEditorService,
-		@IQueryManagementService private _queryManagementService: IQueryManagementService
+		@IQueryManagementService private _queryManagementService: IQueryManagementService,
+		@ILogService private _logService: ILogService
 	) {
 		super();
 		if (extHostContext) {
@@ -36,8 +38,8 @@ export class MainThreadQueryEditor extends Disposable implements MainThreadQuery
 
 	public $connect(fileUri: string, connectionId: string): Thenable<void> {
 		return new Promise<void>((resolve, reject) => {
-			let editors = this._editorService.visibleControls.filter(resource => {
-				return !!resource && resource.input.getResource().toString() === fileUri;
+			let editors = this._editorService.visibleEditorPanes.filter(resource => {
+				return !!resource && resource.input.resource.toString() === fileUri;
 			});
 			let editor = editors && editors.length > 0 ? editors[0] : undefined;
 			let options: IConnectionCompletionOptions = {
@@ -73,8 +75,8 @@ export class MainThreadQueryEditor extends Disposable implements MainThreadQuery
 
 	public $connectWithProfile(fileUri: string, connection: azdata.connection.ConnectionProfile): Thenable<void> {
 		return new Promise<void>(async (resolve, reject) => {
-			let editors = this._editorService.visibleControls.filter(resource => {
-				return !!resource && resource.input.getResource().toString() === fileUri;
+			let editors = this._editorService.visibleEditorPanes.filter(resource => {
+				return !!resource && resource.input.resource.toString() === fileUri;
 			});
 			let editor = editors && editors.length > 0 ? editors[0] : undefined;
 
@@ -89,21 +91,21 @@ export class MainThreadQueryEditor extends Disposable implements MainThreadQuery
 			let profile: IConnectionProfile = MainThreadQueryEditor.connectionProfileToIConnectionProfile(connection);
 			let connectionResult = await this._connectionManagementService.connect(profile, fileUri, options);
 			if (connectionResult && connectionResult.connected) {
-				console.log(`editor ${fileUri} connected`);
+				this._logService.info(`editor ${fileUri} connected`);
 			}
 		});
 	}
 
 	public $runQuery(fileUri: string, runCurrentQuery: boolean = true): void {
-		let filteredEditors = this._editorService.visibleControls.filter(editor => editor.input.getResource().toString() === fileUri);
+		let filteredEditors = this._editorService.visibleEditorPanes.filter(editor => editor.input.resource.toString() === fileUri);
 		if (filteredEditors && filteredEditors.length > 0) {
 			let editor = filteredEditors[0];
 			if (editor instanceof QueryEditor) {
 				let queryEditor: QueryEditor = editor;
 				if (runCurrentQuery) {
-					queryEditor.runCurrentQuery();
+					queryEditor.runCurrentQuery().catch((e) => this._logService.error(e));
 				} else {
-					queryEditor.runQuery();
+					queryEditor.runQuery().catch((e) => this._logService.error(e));
 				}
 			}
 		}
@@ -116,8 +118,8 @@ export class MainThreadQueryEditor extends Disposable implements MainThreadQuery
 	}
 
 	public $createQueryTab(fileUri: string, title: string, componentId: string): void {
-		let editors = this._editorService.visibleControls.filter(resource => {
-			return !!resource && resource.input.getResource().toString() === fileUri;
+		let editors = this._editorService.visibleEditorPanes.filter(resource => {
+			return !!resource && resource.input.resource.toString() === fileUri;
 		});
 
 		let editor = editors && editors.length > 0 ? editors[0] : undefined;

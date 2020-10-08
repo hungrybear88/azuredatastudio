@@ -7,7 +7,6 @@ import * as Platform from 'vs/base/common/platform';
 import * as os from 'os';
 import * as uuid from 'vs/base/common/uuid';
 import { readFile } from 'vs/base/node/pfs';
-import { mixin } from 'vs/base/common/objects';
 
 import product from 'vs/platform/product/common/product'; // {{SQL CARBON EDIT}}
 const productObject = product; // {{SQL CARBON EDIT}}
@@ -18,28 +17,15 @@ export async function resolveCommonProperties(
 	machineId: string | undefined,
 	msftInternalDomains: string[] | undefined,
 	installSourcePath: string,
-	product?: string,
-	resolveAdditionalProperties?: () => { [key: string]: any }
+	product?: string
 ): Promise<{ [name: string]: string | boolean | undefined; }> {
 	const result: { [name: string]: string | boolean | undefined; } = Object.create(null);
-	// {{SQL CARBON EDIT}} start
-	if (productObject.quality !== 'stable') {
-		// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
-		result['common.machineId'] = machineId;
-		// __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-		result['sessionID'] = uuid.generateUuid() + Date.now();
-		// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
-		result['commitHash'] = commit;
-	} else {
-		// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
-		// result['common.machineId'] = machineId;
-		result['common.machineId'] = '';
-		// // __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-		// result['sessionID'] = uuid.generateUuid() + Date.now();
-		result['sessionID'] = '';
-		// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-		result['commitHash'] = '';
-	} // {{SQL CARBON EDIT}} end
+	// __GDPR__COMMON__ "common.machineId" : { "endPoint": "MacAddressHash", "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight" }
+	result['common.machineId'] = machineId;
+	// __GDPR__COMMON__ "sessionID" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+	result['sessionID'] = uuid.generateUuid() + Date.now();
+	// __GDPR__COMMON__ "commitHash" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
+	result['commitHash'] = commit;
 	// __GDPR__COMMON__ "version" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 	result['version'] = version;
 	// __GDPR__COMMON__ "common.platformVersion" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
@@ -53,12 +39,13 @@ export async function resolveCommonProperties(
 	// __GDPR__COMMON__ "common.product" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
 	result['common.product'] = productObject.nameShort || 'desktop'; // {{SQL CARBON EDIT}}
 	result['common.application.name'] = productObject.nameLong; // {{SQL CARBON EDIT}}
+	result['quality'] = productObject.quality || 'dev'; // {{SQL CARBON EDIT}} Add quality
 
-	// const msftInternal = verifyMicrosoftInternalDomain(msftInternalDomains || []); {{SQL CARBON EDIT}} remove msft internal
-	// if (msftInternal) {
-	// 	// __GDPR__COMMON__ "common.msftInternal" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
-	// 	result['common.msftInternal'] = msftInternal;
-	// }
+	const msftInternal = verifyMicrosoftInternalDomain(msftInternalDomains || []);
+	if (msftInternal) {
+		// __GDPR__COMMON__ "common.msftInternal" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true }
+		result['common.msftInternal'] = msftInternal;
+	}
 
 	// dynamic properties which value differs on each call
 	let seq = 0;
@@ -95,24 +82,14 @@ export async function resolveCommonProperties(
 		// ignore error
 	}
 
-	if (resolveAdditionalProperties) {
-		mixin(result, resolveAdditionalProperties());
-	}
-
 	return result;
 }
 
-function verifyMicrosoftInternalDomain(domainList: string[]): boolean {
+function verifyMicrosoftInternalDomain(domainList: readonly string[]): boolean {
 	if (!process || !process.env || !process.env['USERDNSDOMAIN']) {
 		return false;
 	}
 
 	const domain = process.env['USERDNSDOMAIN']!.toLowerCase();
-	for (let msftDomain of domainList) {
-		if (domain === msftDomain) {
-			return true;
-		}
-	}
-
-	return false;
+	return domainList.some(msftDomain => domain === msftDomain);
 }

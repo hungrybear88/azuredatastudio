@@ -6,11 +6,11 @@
 import * as azdata from 'azdata';
 import * as assert from 'assert';
 import * as TypeMoq from 'typemoq';
-import { EventVerifierSingle } from 'sqltest/utils/eventVerifier';
 import { Emitter } from 'vs/base/common/event';
 import { AccountPickerViewModel } from 'sql/platform/accounts/common/accountPickerViewModel';
 import { UpdateAccountListEventParams } from 'sql/platform/accounts/common/eventTypes';
 import { TestAccountManagementService } from 'sql/platform/accounts/test/common/testAccountManagementService';
+import { EventVerifierSingle } from 'sql/base/test/common/event';
 
 // SUITE STATE /////////////////////////////////////////////////////////////
 let mockUpdateAccountEmitter: Emitter<UpdateAccountListEventParams>;
@@ -71,56 +71,49 @@ suite('Account picker view model tests', () => {
 		evUpdateAccounts.assertFired(argUpdateAccounts);
 	});
 
-	test('Initialize - Success', done => {
+	test('Initialize - Success', () => {
 		// Setup: Create a viewmodel with event handlers
 		let mockAccountManagementService = getMockAccountManagementService(true, true);
 		let evUpdateAccounts = new EventVerifierSingle<UpdateAccountListEventParams>();
 		let vm = getViewModel(mockAccountManagementService.object, evUpdateAccounts);
 
 		// If: I initialize the view model
-		vm.initialize()
+		return vm.initialize()
 			.then(results => {
 				// Then:
 				// ... None of the events should have fired
 				evUpdateAccounts.assertNotFired();
 
 				// ... The account management service should have been called
-				mockAccountManagementService.verify(x => x.getAccountsForProvider(TypeMoq.It.isAny()), TypeMoq.Times.once());
+				mockAccountManagementService.verify(x => x.getAccounts(), TypeMoq.Times.once());
 
 				// ... The results that were returned should be an array of account
 				assert.ok(Array.isArray(results));
 				assert.equal(results.length, 2);
 				assert.equal(results, accounts);
-			}).then(
-				() => done(),
-				err => done(err)
-			);
+			});
 	});
 
-	test('Initialize - Get accounts fails expects empty array', done => {
+	test('Initialize - Get accounts fails expects empty array', () => {
 		// Setup: Create a mock account management service that rejects the promise
 		let mockAccountManagementService = getMockAccountManagementService(true, false);
 		let evUpdateAccounts = new EventVerifierSingle<UpdateAccountListEventParams>();
 		let vm = getViewModel(mockAccountManagementService.object, evUpdateAccounts);
 
 		// If: I initialize the view model
-		vm.initialize()
+		return vm.initialize()
 			.then(result => {
 				// Then:
 				// ... None of the events should have fired
 				evUpdateAccounts.assertNotFired();
 
 				// ... The account management service should have been called
-				mockAccountManagementService.verify(x => x.getAccountsForProvider(TypeMoq.It.isAny()), TypeMoq.Times.once());
+				mockAccountManagementService.verify(x => x.getAccounts(), TypeMoq.Times.once());
 
 				// ... The results should be an empty array
 				assert.ok(Array.isArray(result));
 				assert.equal(result.length, 0);
-				assert.equal(result, []);
-			}).then(
-				() => done(),
-				err => done()
-			);
+			});
 	});
 });
 
@@ -130,6 +123,8 @@ function getMockAccountManagementService(resolveProviders: boolean, resolveAccou
 	mockAccountManagementService.setup(x => x.getAccountProviderMetadata())
 		.returns(() => resolveProviders ? Promise.resolve(providers) : Promise.reject(null).then());
 	mockAccountManagementService.setup(x => x.getAccountsForProvider(TypeMoq.It.isAny()))
+		.returns(() => resolveAccounts ? Promise.resolve(accounts) : Promise.reject(null).then());
+	mockAccountManagementService.setup(x => x.getAccounts())
 		.returns(() => resolveAccounts ? Promise.resolve(accounts) : Promise.reject(null).then());
 
 	mockAccountManagementService.setup(x => x.updateAccountListEvent)

@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as azdata from 'azdata';
 import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
@@ -72,7 +70,7 @@ export class MssqlObjectExplorerNodeProvider extends ProviderBase implements azd
 
 	private async doExpandNode(nodeInfo: azdata.ExpandNodeInfo, isRefresh: boolean = false): Promise<boolean> {
 		let session = this.sessionMap.get(nodeInfo.sessionId);
-		let response = {
+		let response: azdata.ObjectExplorerExpandInfo = {
 			sessionId: nodeInfo.sessionId,
 			nodePath: nodeInfo.nodePath,
 			errorMessage: undefined,
@@ -119,10 +117,19 @@ export class MssqlObjectExplorerNodeProvider extends ProviderBase implements azd
 					// Only child returned when failure happens : When failed with 'Unauthorized' error, prompt for password.
 					if (children.length === 1 && this.hasExpansionError(children)) {
 						if (children[0].errorStatusCode === 401) {
-							//Prompt for password
-							let password: string = await this.promptPassword(localize('prmptPwd', "Please provide the password to connect to HDFS:"));
-							if (password && password.length > 0) {
-								session.sqlClusterConnection.updatePassword(password);
+							// First prompt for username (defaulting to existing username)
+							let username: string = await this.promptInput(localize('promptUsername', "Please provide the username to connect to HDFS:"), session.sqlClusterConnection.user);
+							// Only update the username if it's different than the original (the update functions ignore falsy values)
+							if (username === session.sqlClusterConnection.user) {
+								username = '';
+							}
+							session.sqlClusterConnection.updateUsername(username);
+
+							// And then prompt for password
+							const password: string = await this.promptPassword(localize('prmptPwd', "Please provide the password to connect to HDFS:"));
+							session.sqlClusterConnection.updatePassword(password);
+
+							if (username || password) {
 								await node.updateFileSource(session.sqlClusterConnection);
 								children = await node.getChildren(true);
 							}
@@ -141,6 +148,15 @@ export class MssqlObjectExplorerNodeProvider extends ProviderBase implements azd
 			expandResult.errorMessage = utils.getErrorMessage(error);
 		}
 		this.expandCompleteEmitter.fire(expandResult);
+	}
+
+	private async promptInput(promptMsg: string, defaultValue: string): Promise<string> {
+		return await this.prompter.promptSingle(<IQuestion>{
+			type: QuestionTypes.input,
+			name: 'inputPrompt',
+			message: promptMsg,
+			default: defaultValue
+		}).then(confirmed => <string>confirmed);
 	}
 
 	private async promptPassword(promptMsg: string): Promise<string> {
@@ -235,7 +251,7 @@ export class MssqlObjectExplorerNodeProvider extends ProviderBase implements azd
 	}
 }
 
-export class SqlClusterSession {
+class SqlClusterSession {
 	private _rootNode: SqlClusterRootNode;
 
 	constructor(

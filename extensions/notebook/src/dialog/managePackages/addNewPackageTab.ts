@@ -5,12 +5,10 @@
 
 import * as nls from 'vscode-nls';
 import * as azdata from 'azdata';
-import * as request from 'request';
 
 import { JupyterServerInstallation, PipPackageOverview } from '../../jupyter/jupyterServerInstallation';
 import * as utils from '../../common/utils';
 import { ManagePackagesDialog } from './managePackagesDialog';
-import { PythonPkgType } from '../../common/constants';
 
 const localize = nls.loadMessageBundle();
 
@@ -28,7 +26,6 @@ export class AddNewPackageTab {
 	private packageInstallButton: azdata.ButtonComponent;
 
 	private readonly InvalidTextPlaceholder = localize('managePackages.invalidTextPlaceholder', "N/A");
-	private readonly PackageNotFoundError = localize('managePackages.packageNotFound', "Could not find the specified package");
 	private readonly SearchPlaceholder = (pkgType: string) => localize('managePackages.searchBarPlaceholder', "Search {0} packages", pkgType);
 
 	constructor(private dialog: ManagePackagesDialog, private jupyterInstallation: JupyterServerInstallation) {
@@ -36,14 +33,18 @@ export class AddNewPackageTab {
 
 		this.addNewPkgTab.registerContent(async view => {
 			this.newPackagesSearchBar = view.modelBuilder.inputBox().withProperties({ width: '400px' }).component();
+			// Search package by name when pressing enter
+			this.newPackagesSearchBar.onEnterKeyPressed(async () => {
+				await this.loadNewPackageInfo();
+			});
 
 			this.packagesSearchButton = view.modelBuilder.button()
 				.withProperties<azdata.ButtonProperties>({
 					label: localize('managePackages.searchButtonLabel', "Search"),
 					width: '200px'
 				}).component();
-			this.packagesSearchButton.onDidClick(() => {
-				this.loadNewPackageInfo();
+			this.packagesSearchButton.onDidClick(async () => {
+				await this.loadNewPackageInfo();
 			});
 
 			this.newPackagesName = view.modelBuilder.text().withProperties({ width: '400px' }).component();
@@ -65,8 +66,8 @@ export class AddNewPackageTab {
 				label: localize('managePackages.installButtonText', "Install"),
 				width: '200px'
 			}).component();
-			this.packageInstallButton.onDidClick(() => {
-				this.doPackageInstall();
+			this.packageInstallButton.onDidClick(async () => {
+				await this.doPackageInstall();
 			});
 
 			let formModel = view.modelBuilder.formContainer()
@@ -107,7 +108,7 @@ export class AddNewPackageTab {
 
 			await this.newPackagesSearchBar.updateProperties({
 				value: '',
-				placeHolder: this.SearchPlaceholder(this.dialog.currentPkgType)
+				placeHolder: this.SearchPlaceholder(this.dialog.model.currentPackageType)
 			});
 			await this.setFieldsToEmpty();
 		} finally {
@@ -145,12 +146,8 @@ export class AddNewPackageTab {
 			}
 
 			let pipPackage: PipPackageOverview;
-			if (this.dialog.currentPkgType === PythonPkgType.Anaconda) {
-				pipPackage = await this.fetchCondaPackage(packageName);
-			} else {
-				pipPackage = await this.fetchPypiPackage(packageName);
-			}
-			if (!pipPackage.versions || pipPackage.versions.length === 0) {
+			pipPackage = await this.dialog.model.getPackageOverview(packageName);
+			if (!pipPackage?.versions || pipPackage.versions.length === 0) {
 				this.dialog.showErrorMessage(
 					localize('managePackages.noVersionsFound',
 						"Could not find any valid versions for the specified package"));
@@ -179,112 +176,7 @@ export class AddNewPackageTab {
 		}
 	}
 
-	private async fetchPypiPackage(packageName: string): Promise<PipPackageOverview> {
-		return new Promise<PipPackageOverview>((resolve, reject) => {
-			request.get(`https://pypi.org/pypi/${packageName}/json`, { timeout: 10000 }, (error, response, body) => {
-				if (error) {
-					return reject(error);
-				}
 
-				if (response.statusCode === 404) {
-					return reject(this.PackageNotFoundError);
-				}
-
-				if (response.statusCode !== 200) {
-					return reject(
-						localize('managePackages.packageRequestError',
-							"Package info request failed with error: {0} {1}",
-							response.statusCode,
-							response.statusMessage));
-				}
-
-				let versionNums: string[] = [];
-				let packageSummary = '';
-
-				let packagesJson = JSON.parse(body);
-				if (packagesJson) {
-					if (packagesJson.releases) {
-						let versionKeys = Object.keys(packagesJson.releases);
-						versionKeys = versionKeys.filter(versionKey => {
-							let releaseInfo = packagesJson.releases[versionKey];
-							return Array.isArray(releaseInfo) && releaseInfo.length > 0;
-						});
-						versionNums = AddNewPackageTab.sortPackageVersions(versionKeys);
-					}
-
-					if (packagesJson.info && packagesJson.info.summary) {
-						packageSummary = packagesJson.info.summary;
-					}
-				}
-
-				resolve({
-					name: packageName,
-					versions: versionNums,
-					summary: packageSummary
-				});
-			});
-		});
-	}
-
-	private async fetchCondaPackage(packageName: string): Promise<PipPackageOverview> {
-		let condaExe = this.jupyterInstallation.getCondaExePath();
-		let cmd = `"${condaExe}" search --json ${packageName}`;
-		let packageResult: string;
-		try {
-			packageResult = await this.jupyterInstallation.executeBufferedCommand(cmd);
-		} catch (err) {
-			throw new Error(this.PackageNotFoundError);
-		}
-
-		if (packageResult) {
-			let packageJson = JSON.parse(packageResult);
-			if (packageJson) {
-				if (packageJson.error) {
-					throw new Error(packageJson.error);
-				}
-
-				let packages = packageJson[packageName];
-				if (Array.isArray(packages)) {
-					let allVersions = packages.filter(pkg => pkg && pkg.version).map(pkg => pkg.version);
-					let singletonVersions = new Set<string>(allVersions);
-					let sortedVersions = AddNewPackageTab.sortPackageVersions(Array.from(singletonVersions));
-					return {
-						name: packageName,
-						versions: sortedVersions,
-						summary: undefined
-					};
-				}
-			}
-		}
-
-		return undefined;
-	}
-
-	public static sortPackageVersions(versions: string[]): string[] {
-		return versions.sort((first, second) => {
-			// sort in descending order
-			let firstVersion = first.split('.').map(numStr => Number.parseInt(numStr));
-			let secondVersion = second.split('.').map(numStr => Number.parseInt(numStr));
-
-			// If versions have different lengths, then append zeroes to the shorter one
-			if (firstVersion.length > secondVersion.length) {
-				let diff = firstVersion.length - secondVersion.length;
-				secondVersion = secondVersion.concat(new Array(diff).fill(0));
-			} else if (secondVersion.length > firstVersion.length) {
-				let diff = secondVersion.length - firstVersion.length;
-				firstVersion = firstVersion.concat(new Array(diff).fill(0));
-			}
-
-			for (let i = 0; i < firstVersion.length; ++i) {
-				if (firstVersion[i] > secondVersion[i]) {
-					return -1;
-				} else if (firstVersion[i] < secondVersion[i]) {
-					return 1;
-				}
-			}
-			return 0;
-		});
-	}
 
 	private async doPackageInstall(): Promise<void> {
 		let packageName = this.newPackagesName.value;
@@ -304,11 +196,7 @@ export class AddNewPackageTab {
 			isCancelable: false,
 			operation: op => {
 				let installPromise: Promise<void>;
-				if (this.dialog.currentPkgType === PythonPkgType.Anaconda) {
-					installPromise = this.jupyterInstallation.installCondaPackage(packageName, packageVersion);
-				} else {
-					installPromise = this.jupyterInstallation.installPipPackage(packageName, packageVersion);
-				}
+				installPromise = this.dialog.model.installPackages([{ name: packageName, version: packageVersion }]);
 				installPromise
 					.then(async () => {
 						let installMsg = localize('managePackages.backgroundInstallComplete',

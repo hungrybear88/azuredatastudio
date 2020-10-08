@@ -38,7 +38,11 @@ export interface IExtension {
 
 	readonly schemaCompare: ISchemaCompareService;
 
+	readonly languageExtension: ILanguageExtensionService;
+
 	readonly dacFx: IDacFxService;
+
+	readonly sqlAssessment: ISqlAssessmentService;
 }
 
 /**
@@ -75,6 +79,11 @@ export interface SchemaCompareResult extends azdata.ResultStatus {
 	differences: DiffEntry[];
 }
 
+export interface SchemaCompareIncludeExcludeResult extends azdata.ResultStatus {
+	affectedDependencies: DiffEntry[];
+	blockingDependencies: DiffEntry[];
+}
+
 export interface SchemaCompareCompletionResult extends azdata.ResultStatus {
 	operationId: string;
 	areEqual: boolean;
@@ -91,6 +100,7 @@ export interface DiffEntry {
 	children: DiffEntry[];
 	sourceScript: string;
 	targetScript: string;
+	included: boolean;
 }
 
 export const enum SchemaUpdateAction {
@@ -290,7 +300,7 @@ export interface ISchemaCompareService {
 	schemaCompareGenerateScript(operationId: string, targetServerName: string, targetDatabaseName: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<azdata.ResultStatus>;
 	schemaComparePublishChanges(operationId: string, targetServerName: string, targetDatabaseName: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<azdata.ResultStatus>;
 	schemaCompareGetDefaultOptions(): Thenable<SchemaCompareOptionsResult>;
-	schemaCompareIncludeExcludeNode(operationId: string, diffEntry: DiffEntry, IncludeRequest: boolean, taskExecutionMode: azdata.TaskExecutionMode): Thenable<azdata.ResultStatus>;
+	schemaCompareIncludeExcludeNode(operationId: string, diffEntry: DiffEntry, IncludeRequest: boolean, taskExecutionMode: azdata.TaskExecutionMode): Thenable<SchemaCompareIncludeExcludeResult>;
 	schemaCompareOpenScmp(filePath: string): Thenable<SchemaCompareOpenScmpResult>;
 	schemaCompareSaveScmp(sourceEndpointInfo: SchemaCompareEndpointInfo, targetEndpointInfo: SchemaCompareEndpointInfo, taskExecutionMode: azdata.TaskExecutionMode, deploymentOptions: DeploymentOptions, scmpFilePath: string, excludedSourceObjects: SchemaCompareObjectId[], excludedTargetObjects: SchemaCompareObjectId[]): Thenable<azdata.ResultStatus>;
 	schemaCompareCancel(operationId: string): Thenable<azdata.ResultStatus>;
@@ -309,12 +319,22 @@ export interface SchemaCompareOpenScmpResult extends azdata.ResultStatus {
 //#endregion
 
 //#region --- dacfx
+export const enum ExtractTarget {
+	dacpac = 0,
+	file = 1,
+	flat = 2,
+	objectType = 3,
+	schema = 4,
+	schemaObjectType = 5
+}
+
 export interface IDacFxService {
 	exportBacpac(databaseName: string, packageFilePath: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
 	importBacpac(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
 	extractDacpac(databaseName: string, packageFilePath: string, applicationName: string, applicationVersion: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
-	deployDacpac(packageFilePath: string, databaseName: string, upgradeExisting: boolean, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
-	generateDeployScript(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
+	importDatabaseProject(databaseName: string, targetFilePath: string, applicationName: string, applicationVersion: string, ownerUri: string, extractTarget: ExtractTarget, taskExecutionMode: azdata.TaskExecutionMode): Thenable<DacFxResult>;
+	deployDacpac(packageFilePath: string, databaseName: string, upgradeExisting: boolean, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode, sqlCommandVariableValues?: Record<string, string>): Thenable<DacFxResult>;
+	generateDeployScript(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode, sqlCommandVariableValues?: Record<string, string>): Thenable<DacFxResult>;
 	generateDeployPlan(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: azdata.TaskExecutionMode): Thenable<GenerateDeployPlanResult>;
 }
 
@@ -346,6 +366,7 @@ export interface ExtractParams {
 	applicationName: string;
 	applicationVersion: string;
 	ownerUri: string;
+	extractTarget?: ExtractTarget;
 	taskExecutionMode: azdata.TaskExecutionMode;
 }
 
@@ -371,6 +392,30 @@ export interface GenerateDeployPlan {
 	taskExecutionMode: azdata.TaskExecutionMode;
 }
 
+//#endregion
+
+//#region --- Language Extensibility
+export interface ExternalLanguageContent {
+	pathToExtension: string;
+	extensionFileName: string;
+	platform?: string;
+	parameters?: string;
+	environmentVariables?: string;
+	isLocalFile: boolean;
+}
+
+export interface ExternalLanguage {
+	name: string;
+	owner?: string;
+	contents: ExternalLanguageContent[];
+	createdDate?: string;
+}
+
+export interface ILanguageExtensionService {
+	listLanguages(ownerUri: string): Thenable<ExternalLanguage[]>;
+	deleteLanguage(ownerUri: string, languageName: string): Thenable<void>;
+	updateLanguage(ownerUri: string, language: ExternalLanguage): Thenable<void>;
+}
 //#endregion
 
 //#region --- cms
@@ -431,3 +476,17 @@ export interface ListRegisteredServersResult {
 	registeredServerGroups: Array<RegisteredServerGroup>;
 }
 //#endregion
+
+/**
+ * Sql Assessment
+ */
+
+// SqlAssessment interfaces  -----------------------------------------------------------------------
+
+
+
+export interface ISqlAssessmentService {
+	assessmentInvoke(ownerUri: string, targetType: azdata.sqlAssessment.SqlAssessmentTargetType): Promise<azdata.SqlAssessmentResult>;
+	getAssessmentItems(ownerUri: string, targetType: azdata.sqlAssessment.SqlAssessmentTargetType): Promise<azdata.SqlAssessmentResult>;
+	generateAssessmentScript(items: azdata.SqlAssessmentResultItem[], targetServerName: string, targetDatabaseName: string, taskExecutionMode: azdata.TaskExecutionMode): Promise<azdata.ResultStatus>;
+}

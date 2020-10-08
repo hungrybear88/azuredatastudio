@@ -3,7 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import 'vs/css!sql/media/icons/common-icons';
 import 'vs/css!./media/newDashboardTabDialog';
 
 import * as DOM from 'vs/base/browser/dom';
@@ -12,7 +11,6 @@ import { Event, Emitter } from 'vs/base/common/event';
 import { localize } from 'vs/nls';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { attachListStyler } from 'vs/platform/theme/common/styler';
-import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { IListVirtualDelegate, IListRenderer } from 'vs/base/browser/ui/list/list';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
@@ -20,14 +18,16 @@ import { KeyCode } from 'vs/base/common/keyCodes';
 
 import { Button } from 'sql/base/browser/ui/button/button';
 import { Modal } from 'sql/workbench/browser/modal/modal';
-import { attachModalDialogStyler, attachButtonStyler } from 'sql/platform/theme/common/styler';
+import { attachButtonStyler } from 'sql/platform/theme/common/styler';
 import * as TelemetryKeys from 'sql/platform/telemetry/common/telemetryKeys';
 import { NewDashboardTabViewModel, IDashboardUITab } from 'sql/workbench/services/dashboard/browser/newDashboardTabViewModel';
-import { IDashboardTab } from 'sql/platform/dashboard/browser/dashboardRegistry';
+import { IDashboardTab } from 'sql/workbench/services/dashboard/browser/common/interfaces';
 import { IClipboardService } from 'sql/platform/clipboard/common/clipboardService';
 import { ILogService } from 'vs/platform/log/common/log';
-import { IWorkbenchLayoutService } from 'vs/workbench/services/layout/browser/layoutService';
-import { ITextResourcePropertiesService } from 'vs/editor/common/services/resourceConfiguration';
+import { ITextResourcePropertiesService } from 'vs/editor/common/services/textResourceConfigurationService';
+import { IAdsTelemetryService } from 'sql/platform/telemetry/common/telemetry';
+import { attachModalDialogStyler } from 'sql/workbench/common/styler';
+import { ILayoutService } from 'vs/platform/layout/browser/layoutService';
 
 class ExtensionListDelegate implements IListVirtualDelegate<IDashboardUITab> {
 
@@ -53,7 +53,7 @@ interface ExtensionListTemplate {
 class ExtensionListRenderer implements IListRenderer<IDashboardUITab, ExtensionListTemplate> {
 	public static TEMPLATE_ID = 'extensionListRenderer';
 	private static readonly OPENED_TAB_CLASS = 'success';
-	private static readonly ICON_CLASS = 'extension-status-icon icon';
+	private static readonly ICON_CLASS = 'extension-status-icon codicon';
 
 	public get templateId(): string {
 		return ExtensionListRenderer.TEMPLATE_ID;
@@ -62,7 +62,7 @@ class ExtensionListRenderer implements IListRenderer<IDashboardUITab, ExtensionL
 	public renderTemplate(container: HTMLElement): ExtensionListTemplate {
 		const tableTemplate: ExtensionListTemplate = Object.create(null);
 		tableTemplate.root = DOM.append(container, DOM.$('div.list-row.extensionTab-list'));
-		tableTemplate.icon = DOM.append(tableTemplate.root, DOM.$('div.icon'));
+		tableTemplate.icon = DOM.append(tableTemplate.root, DOM.$('div.codicon'));
 		let titleContainer = DOM.append(tableTemplate.root, DOM.$('div.extension-details'));
 		tableTemplate.title = DOM.append(titleContainer, DOM.$('div.title'));
 		tableTemplate.description = DOM.append(titleContainer, DOM.$('div.description'));
@@ -108,9 +108,9 @@ export class NewDashboardTabDialog extends Modal {
 	public get onCancel(): Event<void> { return this._onCancel.event; }
 
 	constructor(
-		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
+		@ILayoutService layoutService: ILayoutService,
 		@IThemeService themeService: IThemeService,
-		@ITelemetryService telemetryService: ITelemetryService,
+		@IAdsTelemetryService telemetryService: IAdsTelemetryService,
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@IClipboardService clipboardService: IClipboardService,
 		@ILogService logService: ILogService,

@@ -8,6 +8,7 @@ import * as fs from 'fs-extra';
 import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
 import * as azdata from 'azdata';
+import { notebookLanguages } from './constants';
 
 const localize = nls.loadMessageBundle();
 
@@ -22,7 +23,7 @@ export function getLivyUrl(serverName: string, port: string): string {
 export async function mkDir(dirPath: string, outputChannel?: vscode.OutputChannel): Promise<void> {
 	if (!await fs.pathExists(dirPath)) {
 		if (outputChannel) {
-			outputChannel.appendLine(localize('mkdirOutputMsg', '... Creating {0}', dirPath));
+			outputChannel.appendLine(localize('mkdirOutputMsg', "... Creating {0}", dirPath));
 		}
 		await fs.ensureDir(dirPath);
 	}
@@ -66,20 +67,29 @@ export function executeStreamedCommand(cmd: string, options: childProcess.SpawnO
 		let child = childProcess.spawn(cmd, [], options);
 
 		// Add listeners to resolve/reject the promise on exit
-		child.on('error', reject);
+		child.on('error', err => {
+			reject(err);
+		});
+
+		let stdErrLog = '';
 		child.on('exit', (code: number) => {
 			if (code === 0) {
 				resolve();
 			} else {
-				reject(localize('executeCommandProcessExited', 'Process exited with code {0}', code));
+				reject(new Error(localize('executeCommandProcessExited', "Process exited with error code: {0}. StdErr Output: {1}", code, stdErrLog)));
 			}
 		});
 
 		// Add listeners to print stdout and stderr if an output channel was provided
 		if (outputChannel) {
 			child.stdout.on('data', data => { outputDataChunk(data, outputChannel, '    stdout: '); });
-			child.stderr.on('data', data => { outputDataChunk(data, outputChannel, '    stderr: '); });
 		}
+		child.stderr.on('data', data => {
+			if (outputChannel) {
+				outputDataChunk(data, outputChannel, '    stderr: ');
+			}
+			stdErrLog += data.toString();
+		});
 	});
 }
 
@@ -139,21 +149,54 @@ export function getOSPlatformId(): string {
 	return platformId;
 }
 
-// PRIVATE HELPERS /////////////////////////////////////////////////////////
-function outputDataChunk(data: string | Buffer, outputChannel: vscode.OutputChannel, header: string): void {
-	data.toString().split(/\r?\n/)
-		.forEach(line => {
-			outputChannel.appendLine(header + line);
-		});
+/**
+ * Compares two version strings to see which is greater.
+ * @param first First version string to compare.
+ * @param second Second version string to compare.
+ * @returns 1 if the first version is greater, -1 if it's less, and 0 otherwise.
+ */
+export function comparePackageVersions(first: string, second: string): number {
+	let firstVersion = first.split('.').map(numStr => Number.parseInt(numStr));
+	let secondVersion = second.split('.').map(numStr => Number.parseInt(numStr));
+
+	// If versions have different lengths, then append zeroes to the shorter one
+	if (firstVersion.length > secondVersion.length) {
+		let diff = firstVersion.length - secondVersion.length;
+		secondVersion = secondVersion.concat(new Array(diff).fill(0));
+	} else if (secondVersion.length > firstVersion.length) {
+		let diff = secondVersion.length - firstVersion.length;
+		firstVersion = firstVersion.concat(new Array(diff).fill(0));
+	}
+
+	for (let i = 0; i < firstVersion.length; ++i) {
+		if (firstVersion[i] > secondVersion[i]) {
+			return 1;
+		} else if (firstVersion[i] < secondVersion[i]) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+export function sortPackageVersions(versions: string[], ascending: boolean = true): string[] {
+	return versions.sort((first, second) => {
+		let compareResult = comparePackageVersions(first, second);
+		if (ascending) {
+			return compareResult;
+		} else {
+			return compareResult * -1;
+		}
+	});
 }
 
 export function isEditorTitleFree(title: string): boolean {
-	let hasTextDoc = vscode.workspace.textDocuments.findIndex(doc => doc.isUntitled && doc.fileName === title) > -1;
+
+	let hasTextDoc = vscode.workspace.textDocuments.findIndex(doc => doc.isUntitled && doc.fileName === title && !notebookLanguages.find(lang => lang === doc.languageId)) > -1;
 	let hasNotebookDoc = azdata.nb.notebookDocuments.findIndex(doc => doc.isUntitled && doc.fileName === title) > -1;
 	return !hasTextDoc && !hasNotebookDoc;
 }
 
-export function getClusterEndpoints(serverInfo: azdata.ServerInfo): IEndpoint[] | undefined {
+export function getClusterEndpoints(serverInfo: azdata.ServerInfo): IEndpoint[] {
 	let endpoints: RawEndpoint[] = serverInfo.options['clusterEndpoints'];
 	if (!endpoints || endpoints.length === 0) { return []; }
 
@@ -196,4 +239,64 @@ export async function exists(path: string): Promise<boolean> {
 	} catch (e) {
 		return false;
 	}
+}
+
+const bdcConfigSectionName = 'bigDataCluster';
+const ignoreSslConfigName = 'ignoreSslVerification';
+
+/**
+ * Retrieves the current setting for whether to ignore SSL verification errors
+ */
+export function getIgnoreSslVerificationConfigSetting(): boolean {
+	try {
+		const config = vscode.workspace.getConfiguration(bdcConfigSectionName);
+		return config.get<boolean>(ignoreSslConfigName, true);
+	} catch (error) {
+		console.error(`Unexpected error retrieving ${bdcConfigSectionName}.${ignoreSslConfigName} setting : ${error}`);
+	}
+	return true;
+}
+
+export function debounce(delay: number): Function {
+	return decorate((fn, key) => {
+		const timerKey = `$debounce$${key}`;
+
+		return function (this: any, ...args: any[]) {
+			clearTimeout(this[timerKey]);
+			this[timerKey] = setTimeout(() => fn.apply(this, args), delay);
+		};
+	});
+}
+
+// PRIVATE HELPERS /////////////////////////////////////////////////////////
+function outputDataChunk(data: string | Buffer, outputChannel: vscode.OutputChannel, header: string): void {
+	data.toString().split(/\r?\n/)
+		.forEach(line => {
+			outputChannel.appendLine(header + line);
+		});
+}
+
+function decorate(decorator: (fn: Function, key: string) => Function): Function {
+	return (_target: any, key: string, descriptor: any) => {
+		let fnKey: string | null = null;
+		let fn: Function | null = null;
+
+		if (typeof descriptor.value === 'function') {
+			fnKey = 'value';
+			fn = descriptor.value;
+		} else if (typeof descriptor.get === 'function') {
+			fnKey = 'get';
+			fn = descriptor.get;
+		}
+
+		if (!fn || !fnKey) {
+			throw new Error('not supported');
+		}
+
+		descriptor[fnKey] = decorator(fn, key);
+	};
+}
+
+export function getDropdownValue(dropdown: azdata.DropDownComponent): string {
+	return (typeof dropdown.value === 'string') ? dropdown.value : dropdown.value.name;
 }

@@ -4,14 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as azdata from 'azdata';
+import { EOL } from 'os';
 import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
-import { DialogBase } from './dialogBase';
+import { DialogInfo, instanceOfNotebookBasedDialogInfo, NotebookBasedDialogInfo } from '../interfaces';
 import { INotebookService } from '../services/notebookService';
-import { DialogInfo, instanceOfNotebookBasedDialogInfo } from '../interfaces';
-import { Validator, initializeDialog, InputComponents, setModelValues } from './modelViewUtils';
+import { IPlatformService } from '../services/platformService';
+import { DialogBase } from './dialogBase';
 import { Model } from './model';
-import { EOL } from 'os';
+import { initializeDialog, InputComponentInfo, InputComponents, setModelValues, Validator } from './modelViewUtils';
 
 const localize = nls.loadMessageBundle();
 
@@ -20,9 +21,19 @@ export class DeploymentInputDialog extends DialogBase {
 	private inputComponents: InputComponents = {};
 
 	constructor(private notebookService: INotebookService,
+		private platformService: IPlatformService,
 		private dialogInfo: DialogInfo) {
 		super(dialogInfo.title, dialogInfo.name, false);
-		this._dialogObject.okButton.label = localize('deploymentDialog.OKButtonText', 'Open Notebook');
+		let okButtonText: string;
+		if (dialogInfo.actionText) {
+			okButtonText = dialogInfo.actionText;
+		} else if (instanceOfNotebookBasedDialogInfo(dialogInfo) && !dialogInfo.runNotebook) {
+			okButtonText = localize('deploymentDialog.OpenNotebook', "Open Notebook");
+		} else {
+			okButtonText = localize('deploymentDialog.OkButtonText', "OK");
+		}
+
+		this._dialogObject.okButton.label = okButtonText;
 	}
 
 	protected initialize() {
@@ -31,11 +42,12 @@ export class DeploymentInputDialog extends DialogBase {
 		initializeDialog({
 			dialogInfo: this.dialogInfo,
 			container: this._dialogObject,
+			inputComponents: this.inputComponents,
 			onNewDisposableCreated: (disposable: vscode.Disposable): void => {
 				this._toDispose.push(disposable);
 			},
-			onNewInputComponentCreated: (name: string, component: azdata.DropDownComponent | azdata.InputBoxComponent | azdata.CheckBoxComponent): void => {
-				this.inputComponents[name] = component;
+			onNewInputComponentCreated: (name: string, inputComponentInfo: InputComponentInfo): void => {
+				this.inputComponents[name] = inputComponentInfo;
 			},
 			onNewValidatorCreated: (validator: Validator): void => {
 				validators.push(validator);
@@ -63,11 +75,19 @@ export class DeploymentInputDialog extends DialogBase {
 		setModelValues(this.inputComponents, model);
 		if (instanceOfNotebookBasedDialogInfo(this.dialogInfo)) {
 			model.setEnvironmentVariables();
-			this.notebookService.launchNotebook(this.dialogInfo.notebook).then(() => { }, (error) => {
-				vscode.window.showErrorMessage(error);
-			});
+			if (this.dialogInfo.runNotebook) {
+				this.executeNotebook(this.dialogInfo);
+			} else {
+				this.notebookService.launchNotebook(this.dialogInfo.notebook).then(() => { }, (error) => {
+					vscode.window.showErrorMessage(error);
+				});
+			}
 		} else {
 			vscode.commands.executeCommand(this.dialogInfo.command, model);
 		}
+	}
+
+	private executeNotebook(notebookDialogInfo: NotebookBasedDialogInfo): void {
+		this.notebookService.backgroundExecuteNotebook(notebookDialogInfo.taskName, notebookDialogInfo.notebook, 'deploy', this.platformService);
 	}
 }

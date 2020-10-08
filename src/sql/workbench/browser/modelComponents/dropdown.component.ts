@@ -11,7 +11,6 @@ import {
 import * as azdata from 'azdata';
 
 import { ComponentBase } from 'sql/workbench/browser/modelComponents/componentBase';
-import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/workbench/browser/modelComponents/interfaces';
 import { Dropdown, IDropdownOptions } from 'sql/base/parts/editableDropdown/browser/dropdown';
 import { SelectBox } from 'sql/base/browser/ui/selectBox/selectBox';
 import { attachEditableDropdownStyler } from 'sql/platform/theme/common/styler';
@@ -20,6 +19,8 @@ import { attachSelectBoxStyler } from 'vs/platform/theme/common/styler';
 import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/workbenchThemeService';
 import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { find } from 'vs/base/common/arrays';
+import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/platform/dashboard/browser/interfaces';
 
 @Component({
 	selector: 'modelview-dropdown',
@@ -73,30 +74,34 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 
 			this._register(this._editableDropdown);
 			this._register(attachEditableDropdownStyler(this._editableDropdown, this.themeService));
-			this._register(this._editableDropdown.onValueChange(e => {
+			this._register(this._editableDropdown.onValueChange(async e => {
 				if (this.editable) {
 					this.setSelectedValue(this._editableDropdown.value);
+					await this.validate();
 					this.fireEvent({
 						eventType: ComponentEventType.onDidChange,
 						args: e
 					});
 				}
 			}));
+			this._validations.push(() => !this.required || !this.editable || !!this._editableDropdown.value);
 		}
 		if (this._dropDownContainer) {
 			this._selectBox = new SelectBox(this.getValues(), this.getSelectedValue(), this.contextViewService, this._dropDownContainer.nativeElement);
 			this._selectBox.render(this._dropDownContainer.nativeElement);
 			this._register(this._selectBox);
 			this._register(attachSelectBoxStyler(this._selectBox, this.themeService));
-			this._register(this._selectBox.onDidSelect(e => {
+			this._register(this._selectBox.onDidSelect(async e => {
 				if (!this.editable) {
 					this.setSelectedValue(this._selectBox.value);
+					await this.validate();
 					this.fireEvent({
 						eventType: ComponentEventType.onDidChange,
 						args: e
 					});
 				}
 			}));
+			this._validations.push(() => !this.required || this.editable || !!this._selectBox.value);
 		}
 	}
 
@@ -135,6 +140,10 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 				this._selectBox.disable();
 			}
 		}
+
+		this._selectBox.selectElem.required = this.required;
+		this._editableDropdown.inputElement.required = this.required;
+		this.validate();
 	}
 
 	private getValues(): string[] {
@@ -155,7 +164,7 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 	private getSelectedValue(): string {
 		if (this.values && this.values.length > 0 && this.valuesHaveDisplayName()) {
 			let selectedValue = <azdata.CategoryValue>this.value || <azdata.CategoryValue>this.values[0];
-			let valueCategory = (<azdata.CategoryValue[]>this.values).find(v => v.name === selectedValue.name);
+			let valueCategory = find(<azdata.CategoryValue[]>this.values, v => v.name === selectedValue.name);
 			return valueCategory && valueCategory.displayName;
 		} else {
 			if (!this.value && this.values && this.values.length > 0) {
@@ -167,7 +176,7 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 
 	private setSelectedValue(newValue: string): void {
 		if (this.values && this.valuesHaveDisplayName()) {
-			let valueCategory = (<azdata.CategoryValue[]>this.values).find(v => v.displayName === newValue);
+			let valueCategory = find((<azdata.CategoryValue[]>this.values), v => v.displayName === newValue);
 			this.value = valueCategory;
 		} else {
 			this.value = newValue;
@@ -186,10 +195,6 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 
 	private get fireOnTextChange(): boolean {
 		return this.getPropertyOrDefault<azdata.DropDownProperties, boolean>((props) => props.fireOnTextChange, false);
-	}
-
-	private get ariaLabel(): string {
-		return this.getPropertyOrDefault<azdata.DropDownProperties, string>((props) => props.ariaLabel, '');
 	}
 
 	public getEditableDisplay(): string {
@@ -218,5 +223,21 @@ export default class DropDownComponent extends ComponentBase implements ICompone
 
 	private setValuesProperties(properties: azdata.DropDownProperties, values: string[] | azdata.CategoryValue[]): void {
 		properties.values = values;
+	}
+
+	public get required(): boolean {
+		return this.getPropertyOrDefault<azdata.DropDownProperties, boolean>((props) => props.required, false);
+	}
+
+	public set required(newValue: boolean) {
+		this.setPropertyFromUI<azdata.DropDownProperties, boolean>((props, value) => props.required = value, newValue);
+	}
+
+	public focus(): void {
+		if (this.editable && !this._isInAccessibilityMode) {
+			this._editableDropdown.focus();
+		} else {
+			this._selectBox.focus();
+		}
 	}
 }

@@ -29,21 +29,19 @@ const packageJson = require('../package.json');
 const product = require('../product.json');
 const crypto = require('crypto');
 const i18n = require('./lib/i18n');
-const ext = require('./lib/extensions'); // {{SQL CARBON EDIT}}
 const deps = require('./dependencies');
-const getElectronVersion = require('./lib/electron').getElectronVersion;
+const { config } = require('./lib/electron');
 const createAsar = require('./lib/asar').createAsar;
 const { compileBuildTask } = require('./gulpfile.compile');
 const { compileExtensionsBuildTask } = require('./gulpfile.extensions');
 
 const productionDependencies = deps.getProductionDependencies(path.dirname(__dirname));
-
 const baseModules = Object.keys(process.binding('natives')).filter(n => !/^_|\//.test(n));
-// {{SQL CARBON EDIT}}
-const nodeModules = [
+const nodeModules = [ // {{SQL CARBON EDIT}}
 	'electron',
 	'original-fs',
 	'rxjs/Observable',
+	'rxjs/add/observable/fromPromise',
 	'rxjs/Subject',
 	'rxjs/Observer',
 	'slickgrid/lib/jquery.event.drag-2.3.0',
@@ -78,8 +76,8 @@ const vscodeResources = [
 	'out-build/vs/base/common/performance.js',
 	'out-build/vs/base/node/languagePacks.js',
 	'out-build/vs/base/node/{stdForkStart.js,terminateProcess.sh,cpuUsage.sh,ps.sh}',
-	'out-build/vs/base/browser/ui/octiconLabel/octicons/**',
-	'out-build/vs/base/browser/ui/codiconLabel/codicon/**',
+	'out-build/vs/base/browser/ui/codicons/codicon/**',
+	'out-build/vs/base/parts/sandbox/electron-browser/preload.js',
 	'out-build/vs/workbench/browser/media/*-theme.css',
 	'out-build/vs/workbench/contrib/debug/**/*.json',
 	'out-build/vs/workbench/contrib/externalTerminal/**/*.scpt',
@@ -93,8 +91,7 @@ const vscodeResources = [
 	'out-build/vs/code/electron-browser/sharedProcess/sharedProcess.js',
 	'out-build/vs/code/electron-browser/issue/issueReporter.js',
 	'out-build/vs/code/electron-browser/processExplorer/processExplorer.js',
-	// {{SQL CARBON EDIT}}
-	'out-build/sql/workbench/electron-browser/splashscreen/*',
+	'out-build/sql/workbench/electron-browser/splashscreen/*', // {{SQL CARBON EDIT}} STart
 	'out-build/sql/**/*.{svg,png,cur,html}',
 	'out-build/sql/base/browser/ui/table/media/*.{gif,png,svg}',
 	'out-build/sql/base/browser/ui/checkbox/media/*.{gif,png,svg}',
@@ -112,7 +109,8 @@ const vscodeResources = [
 	'out-build/sql/media/objectTypes/*.svg',
 	'out-build/sql/media/icons/*.svg',
 	'out-build/sql/workbench/parts/notebook/media/**/*.svg',
-	'out-build/sql/setup.js',
+	'out-build/sql/setup.js', // {{SQL CARBON EDIT}} end
+	'out-build/vs/platform/auth/common/auth.css',
 	'!**/test/**'
 ];
 
@@ -124,13 +122,12 @@ const optimizeVSCodeTask = task.define('optimize-vscode', task.series(
 		resources: vscodeResources,
 		loaderConfig: common.loaderConfig(nodeModules),
 		out: 'out-vscode',
-		inlineAmdImages: true,
 		bundleInfo: undefined
 	})
 ));
 gulp.task(optimizeVSCodeTask);
 
-const sourceMappingURLBase = `https://ticino.blob.core.windows.net/sourcemaps/${commit}`;
+const sourceMappingURLBase = `https://sqlopsbuilds.blob.core.windows.net/sourcemaps/${commit}`;
 const minifyVSCodeTask = task.define('minify-vscode', task.series(
 	optimizeVSCodeTask,
 	util.rimraf('out-vscode-min'),
@@ -144,73 +141,6 @@ const minifyVSCodeTask = task.define('minify-vscode', task.series(
 ));
 gulp.task(minifyVSCodeTask);
 
-// Package
-
-// @ts-ignore JSON checking: darwinCredits is optional
-const darwinCreditsTemplate = product.darwinCredits && _.template(fs.readFileSync(path.join(root, product.darwinCredits), 'utf8'));
-
-function darwinBundleDocumentType(extensions, icon) {
-	return {
-		name: product.nameLong + ' document',
-		role: 'Editor',
-		ostypes: ["TEXT", "utxt", "TUTX", "****"],
-		extensions: extensions,
-		iconFile: icon
-	};
-}
-
-const config = {
-	version: getElectronVersion(),
-	productAppName: product.nameLong,
-	companyName: 'Microsoft Corporation',
-	copyright: 'Copyright (C) 2019 Microsoft. All rights reserved',
-	darwinIcon: 'resources/darwin/code.icns',
-	darwinBundleIdentifier: product.darwinBundleIdentifier,
-	darwinApplicationCategoryType: 'public.app-category.developer-tools',
-	darwinHelpBookFolder: 'VS Code HelpBook',
-	darwinHelpBookName: 'VS Code HelpBook',
-	darwinBundleDocumentTypes: [
-		// {{SQL CARBON EDIT}} - Remove most document types and replace with ours
-		darwinBundleDocumentType(["csv", "json", "sqlplan", "sql", "xml"], 'resources/darwin/code_file.icns'),
-	],
-	darwinBundleURLTypes: [{
-		role: 'Viewer',
-		name: product.nameLong,
-		urlSchemes: [product.urlProtocol]
-	}],
-	darwinForceDarkModeSupport: true,
-	darwinCredits: darwinCreditsTemplate ? Buffer.from(darwinCreditsTemplate({ commit: commit, date: new Date().toISOString() })) : undefined,
-	linuxExecutableName: product.applicationName,
-	winIcon: 'resources/win32/code.ico',
-	token: process.env['VSCODE_MIXIN_PASSWORD'] || process.env['GITHUB_TOKEN'] || undefined,
-
-	// @ts-ignore JSON checking: electronRepository is optional
-	repo: product.electronRepository || undefined
-};
-
-function getElectron(arch) {
-	return () => {
-		const electronOpts = _.extend({}, config, {
-			platform: process.platform,
-			arch,
-			ffmpegChromium: true,
-			keepDefaultApp: true
-		});
-
-		return gulp.src('package.json')
-			.pipe(json({ name: product.nameShort }))
-			.pipe(electron(electronOpts))
-			.pipe(filter(['**', '!**/app/package.json']))
-			.pipe(vfs.dest('.build/electron'));
-	};
-}
-
-gulp.task(task.define('electron', task.series(util.rimraf('.build/electron'), getElectron(process.arch))));
-gulp.task(task.define('electron-ia32', task.series(util.rimraf('.build/electron'), getElectron('ia32'))));
-gulp.task(task.define('electron-x64', task.series(util.rimraf('.build/electron'), getElectron('x64'))));
-gulp.task(task.define('electron-arm', task.series(util.rimraf('.build/electron'), getElectron('armv7l'))));
-gulp.task(task.define('electron-arm64', task.series(util.rimraf('.build/electron'), getElectron('arm64'))));
-
 /**
  * Compute checksums for some files.
  *
@@ -219,9 +149,9 @@ gulp.task(task.define('electron-arm64', task.series(util.rimraf('.build/electron
  * @return {Object} A map of paths to checksums.
  */
 function computeChecksums(out, filenames) {
-	var result = {};
+	let result = {};
 	filenames.forEach(function (filename) {
-		var fullPath = path.join(process.cwd(), out, filename);
+		let fullPath = path.join(process.cwd(), out, filename);
 		result[filename] = computeChecksum(fullPath);
 	});
 	return result;
@@ -234,9 +164,9 @@ function computeChecksums(out, filenames) {
  * @return {string} The checksum for `filename`.
  */
 function computeChecksum(filename) {
-	var contents = fs.readFileSync(filename);
+	let contents = fs.readFileSync(filename);
 
-	var hash = crypto
+	let hash = crypto
 		.createHash('md5')
 		.update(contents)
 		.digest('base64')
@@ -255,8 +185,10 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 		const out = sourceFolderName;
 
 		const checksums = computeChecksums(out, [
+			'vs/base/parts/sandbox/electron-browser/preload.js',
 			'vs/workbench/workbench.desktop.main.js',
 			'vs/workbench/workbench.desktop.main.css',
+			'vs/workbench/services/extensions/node/extensionHostProcess.js',
 			'vs/code/electron-browser/workbench/workbench.html',
 			'vs/code/electron-browser/workbench/workbench.js'
 		]);
@@ -265,10 +197,7 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			.pipe(rename(function (path) { path.dirname = path.dirname.replace(new RegExp('^' + out), 'out'); }))
 			.pipe(util.setExecutableBit(['**/*.sh']));
 
-		// {{SQL CARBON EDIT}}
-		ext.packageBuiltInExtensions();
-
-		const extensions = gulp.src('.build/extensions/**', { base: '.build', dot: true });
+		const extensions = gulp.src(['.build/extensions/**', '!.build/extensions/node_modules/**'], { base: '.build', dot: true }); // {{SQL CARBON EDIT}} - don't package the node_modules directory
 
 		const sources = es.merge(src, extensions)
 			.pipe(filter(['**', '!**/*.js.map'], { dot: true }));
@@ -308,7 +237,6 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 		const api = gulp.src('src/vs/vscode.d.ts').pipe(rename('out/vs/vscode.d.ts'));
 		// {{SQL CARBON EDIT}}
 		const dataApi = gulp.src('src/sql/azdata.d.ts').pipe(rename('out/sql/azdata.d.ts'));
-		const sqlopsAPI = gulp.src('src/sql/sqlops.d.ts').pipe(rename('out/sql/sqlops.d.ts'));
 
 		const telemetry = gulp.src('.build/telemetry/**', { base: '.build/telemetry', dot: true });
 
@@ -318,15 +246,14 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 		const deps = gulp.src(dependenciesSrc, { base: '.', dot: true })
 			.pipe(filter(['**', '!**/package-lock.json']))
 			.pipe(util.cleanNodeModules(path.join(__dirname, '.nativeignore')))
-			.pipe(createAsar(path.join(process.cwd(), 'node_modules'), ['**/*.node', '**/vscode-ripgrep/bin/*', '**/node-pty/build/Release/*'], 'app/node_modules.asar'));
+			.pipe(createAsar(path.join(process.cwd(), 'node_modules'), ['**/*.node', '**/vscode-ripgrep/bin/*', '**/node-pty/build/Release/*', '**/*.wasm'], 'app/node_modules.asar'));
 
 		let all = es.merge(
 			packageJsonStream,
 			productJsonStream,
 			license,
 			api,
-			dataApi,
-			sqlopsAPI, // {{SQL CARBON EDIT}}
+			dataApi, // {{SQL CARBON EDIT}}
 			telemetry,
 			sources,
 			deps
@@ -348,6 +275,9 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 		}
 
 		let result = all
+			.pipe(fileLengthFilter)
+			.pipe(filelength)
+			.pipe(fileLengthFilter.restore)
 			.pipe(util.skipDirectories())
 			.pipe(util.fixWin32DirectoryPermissions())
 			.pipe(electron(_.extend({}, config, { platform, arch, ffmpegChromium: true })))
@@ -402,11 +332,35 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 	};
 }
 
+const fileLengthFilter = filter([
+	'**',
+	'!extensions/import/*.docx',
+	'!extensions/admin-tool-ext-win/license/**'
+], {restore: true});
+
+const filelength = es.through(function (file) {
+
+	const fileName = path.basename(file.relative);
+	const fileDir = path.dirname(file.relative);
+	//check the filename is < 50 characters (basename gets the filename with extension).
+	if (fileName.length > 50) {
+		console.error(`File name '${fileName}' under ${fileDir} is too long. Rename file to have less than 50 characters.`);
+		throw new Error('File name exceeds acceptable length of 50 characters: ' + fileName);
+	}
+	if (file.relative.length > 150) {
+		console.error(`File path ${file.relative} exceeds acceptable file-length. Rename the path to have less than 150 characters.`);
+		throw new Error('File path exceeds acceptable path-length of 150 characters: ' + file.relative);
+	}
+
+	this.emit('data', file);
+});
+
 const buildRoot = path.dirname(root);
 
 const BUILD_TARGETS = [
 	{ platform: 'win32', arch: 'ia32' },
 	{ platform: 'win32', arch: 'x64' },
+	{ platform: 'win32', arch: 'arm64' },
 	{ platform: 'darwin', arch: null, opts: { stats: true } },
 	{ platform: 'linux', arch: 'ia32' },
 	{ platform: 'linux', arch: 'x64' },
@@ -538,20 +492,30 @@ const generateVSCodeConfigurationTask = task.define('generate-vscode-configurati
 		const extensionsDir = path.join(os.tmpdir(), 'tmpextdir');
 		const appName = process.env.VSCODE_QUALITY === 'insider' ? 'Visual\\ Studio\\ Code\\ -\\ Insiders.app' : 'Visual\\ Studio\\ Code.app';
 		const appPath = path.join(buildDir, `VSCode-darwin/${appName}/Contents/Resources/app/bin/code`);
-		const codeProc = cp.exec(`${appPath} --export-default-configuration='${allConfigDetailsPath}' --wait --user-data-dir='${userDataDir}' --extensions-dir='${extensionsDir}'`);
+		const codeProc = cp.exec(
+			`${appPath} --export-default-configuration='${allConfigDetailsPath}' --wait --user-data-dir='${userDataDir}' --extensions-dir='${extensionsDir}'`,
+			(err, stdout, stderr) => {
+				clearTimeout(timer);
+				if (err) {
+					console.log(`err: ${err} ${err.message} ${err.toString()}`);
+					reject(err);
+				}
 
+				if (stdout) {
+					console.log(`stdout: ${stdout}`);
+				}
+
+				if (stderr) {
+					console.log(`stderr: ${stderr}`);
+				}
+
+				resolve();
+			}
+		);
 		const timer = setTimeout(() => {
 			codeProc.kill();
 			reject(new Error('export-default-configuration process timed out'));
-		}, 10 * 1000);
-
-		codeProc.stdout.on('data', d => console.log(d.toString()));
-		codeProc.stderr.on('data', d => console.log(d.toString()));
-
-		codeProc.on('exit', () => {
-			clearTimeout(timer);
-			resolve();
-		});
+		}, 12 * 1000);
 
 		codeProc.on('error', err => {
 			clearTimeout(timer);

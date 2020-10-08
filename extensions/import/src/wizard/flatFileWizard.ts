@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
 import * as vscode from 'vscode';
 import * as nls from 'vscode-nls';
@@ -29,9 +28,9 @@ export class FlatFileWizard {
 	}
 
 	public async start(p: any, ...args: any[]) {
-		let model = <ImportDataModel>{};
+		let model = {} as ImportDataModel;
 
-		let profile = p ? <azdata.IConnectionProfile>p.connectionProfile : null;
+		let profile = p?.connectionProfile as azdata.IConnectionProfile;
 		if (profile) {
 			model.serverId = profile.id;
 			model.database = profile.databaseName;
@@ -39,21 +38,32 @@ export class FlatFileWizard {
 
 		let pages: Map<number, ImportPage> = new Map<number, ImportPage>();
 
+		let currentConnection = await azdata.connection.getCurrentConnection();
 
-		let connections = await azdata.connection.getActiveConnections();
-		if (!connections || connections.length === 0) {
-			vscode.window.showErrorMessage(localize('import.needConnection', 'Please connect to a server before using this wizard.'));
-			return;
+		let connectionId: string;
+
+		if (!currentConnection) {
+			connectionId = (await azdata.connection.openConnectionDialog(['MSSQL'])).connectionId;
+			if (!connectionId) {
+				vscode.window.showErrorMessage(localize('import.needConnection', "Please connect to a server before using this wizard."));
+				return;
+			}
+		} else {
+			if (currentConnection.providerId !== 'MSSQL') {
+				vscode.window.showErrorMessage(localize('import.needSQLConnection', "SQL Server Import extension does not support this type of connection"));
+				return;
+			}
+			connectionId = currentConnection.connectionId;
 		}
 
-		let currentConnection = await azdata.connection.getCurrentConnection();
-		model.serverId = currentConnection.connectionId;
 
-		this.wizard = azdata.window.createWizard(localize('flatFileImport.wizardName', 'Import flat file wizard'));
-		let page1 = azdata.window.createWizardPage(localize('flatFileImport.page1Name', 'Specify Input File'));
-		let page2 = azdata.window.createWizardPage(localize('flatFileImport.page2Name', 'Preview Data'));
-		let page3 = azdata.window.createWizardPage(localize('flatFileImport.page3Name', 'Modify Columns'));
-		let page4 = azdata.window.createWizardPage(localize('flatFileImport.page4Name', 'Summary'));
+		model.serverId = connectionId;
+
+		this.wizard = azdata.window.createWizard(localize('flatFileImport.wizardName', "Import flat file wizard"));
+		let page1 = azdata.window.createWizardPage(localize('flatFileImport.page1Name', "Specify Input File"));
+		let page2 = azdata.window.createWizardPage(localize('flatFileImport.page2Name', "Preview Data"));
+		let page3 = azdata.window.createWizardPage(localize('flatFileImport.page3Name', "Modify Columns"));
+		let page4 = azdata.window.createWizardPage(localize('flatFileImport.page4Name', "Summary"));
 
 		let fileConfigPage: FileConfigPage;
 
@@ -89,7 +99,7 @@ export class FlatFileWizard {
 		});
 
 
-		this.importAnotherFileButton = azdata.window.createButton(localize('flatFileImport.importNewFile', 'Import new file'));
+		this.importAnotherFileButton = azdata.window.createButton(localize('flatFileImport.importNewFile', "Import new file"));
 		this.importAnotherFileButton.onClick(() => {
 			//TODO replace this with proper cleanup for all the pages
 			this.wizard.close();
@@ -135,6 +145,3 @@ export class FlatFileWizard {
 
 
 }
-
-
-

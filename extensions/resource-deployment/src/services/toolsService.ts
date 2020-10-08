@@ -11,16 +11,33 @@ import { IPlatformService } from './platformService';
 
 export interface IToolsService {
 	getToolByName(toolName: string): ITool | undefined;
+	toolsForCurrentProvider: ITool[];
 }
 
 export class ToolsService implements IToolsService {
-	private supportedTools: ITool[];
+	private supportedTools: Map<string, ITool>;
+	private currentTools: ITool[] = [];
 
 	constructor(private _platformService: IPlatformService) {
-		this.supportedTools = [new DockerTool(this._platformService), new AzCliTool(this._platformService), new AzdataTool(this._platformService), new KubeCtlTool(this._platformService)];
+		this.supportedTools = new Map<string, ITool>(
+			[
+				new DockerTool(this._platformService),
+				new AzCliTool(this._platformService),
+				new AzdataTool(this._platformService),
+				new KubeCtlTool(this._platformService)
+			].map<[string, ITool]>((tool: ITool) => [tool.name, tool])
+		);
 	}
 
 	getToolByName(toolName: string): ITool | undefined {
-		return this.supportedTools.find(t => t.name === toolName);
+		return this.supportedTools.get(toolName);
+	}
+
+	get toolsForCurrentProvider(): ITool[] {
+		return this.currentTools;
+	}
+
+	set toolsForCurrentProvider(tools: ITool[]) {
+		this.currentTools = tools;
 	}
 }

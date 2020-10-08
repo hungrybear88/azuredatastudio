@@ -12,8 +12,8 @@ import { generateUuid } from 'vs/base/common/uuid';
 import { ICapabilitiesService } from 'sql/platform/capabilities/common/capabilitiesService';
 import { isString } from 'vs/base/common/types';
 import { deepClone } from 'vs/base/common/objects';
-import { ConnectionOptionSpecialType } from 'sql/workbench/api/common/sqlExtHostTypes';
 import * as Constants from 'sql/platform/connection/common/constants';
+import { find } from 'vs/base/common/arrays';
 
 // Concrete implementation of the IConnectionProfile interface
 
@@ -25,8 +25,8 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 	public parent?: ConnectionProfileGroup;
 	private _id: string;
 	public savePassword: boolean;
-	private _groupName: string;
-	public groupId: string;
+	private _groupName?: string;
+	public groupId?: string;
 	public saveProfile: boolean;
 
 	public isDisconnecting: boolean = false;
@@ -42,11 +42,14 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 			this.saveProfile = model.saveProfile;
 			this._id = model.id;
 			this.azureTenantId = model.azureTenantId;
+			this.azureAccount = model.azureAccount;
+			this.azureResourceId = model.azureResourceId;
+			this.azurePortalEndpoint = model.azurePortalEndpoint;
 			if (this.capabilitiesService && model.providerName) {
 				let capabilities = this.capabilitiesService.getCapabilities(model.providerName);
 				if (capabilities && capabilities.connection && capabilities.connection.connectionOptions) {
 					const options = capabilities.connection.connectionOptions;
-					let appNameOption = options.find(option => option.specialValueType === ConnectionOptionSpecialType.appName);
+					let appNameOption = find(options, option => option.specialValueType === interfaces.ConnectionOptionSpecialType.appName);
 					if (appNameOption) {
 						let appNameKey = appNameOption.name;
 						this.options[appNameKey] = Constants.applicationName;
@@ -68,18 +71,23 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 		this.options['databaseDisplayName'] = this.databaseName;
 	}
 
-	public matches(other: interfaces.IConnectionProfile): boolean {
-		return other
-			&& this.providerName === other.providerName
-			&& this.nullCheckEqualsIgnoreCase(this.serverName, other.serverName)
-			&& this.nullCheckEqualsIgnoreCase(this.databaseName, other.databaseName)
-			&& this.nullCheckEqualsIgnoreCase(this.userName, other.userName)
-			&& this.nullCheckEqualsIgnoreCase(this.options['databaseDisplayName'], other.options['databaseDisplayName'])
-			&& this.authenticationType === other.authenticationType
-			&& this.groupId === other.groupId;
+	public static matchesProfile(a: interfaces.IConnectionProfile, b: interfaces.IConnectionProfile): boolean {
+		return a && b
+			&& a.providerName === b.providerName
+			&& ConnectionProfile.nullCheckEqualsIgnoreCase(a.serverName, b.serverName)
+			&& ConnectionProfile.nullCheckEqualsIgnoreCase(a.databaseName, b.databaseName)
+			&& ConnectionProfile.nullCheckEqualsIgnoreCase(a.userName, b.userName)
+			&& ConnectionProfile.nullCheckEqualsIgnoreCase(a.options['databaseDisplayName'], b.options['databaseDisplayName'])
+			&& a.authenticationType === b.authenticationType
+			&& a.groupId === b.groupId;
 	}
 
-	private nullCheckEqualsIgnoreCase(a: string, b: string) {
+	public matches(other: interfaces.IConnectionProfile): boolean {
+		return ConnectionProfile.matchesProfile(this, other);
+
+	}
+
+	private static nullCheckEqualsIgnoreCase(a: string, b: string) {
 		let bothNull: boolean = !a && !b;
 		return bothNull ? bothNull : equalsIgnoreCase(a, b);
 	}
@@ -111,6 +119,30 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 		this.options['azureTenantId'] = value;
 	}
 
+	public get azureAccount(): string | undefined {
+		return this.options['azureAccount'];
+	}
+
+	public set azureAccount(value: string | undefined) {
+		this.options['azureAccount'] = value;
+	}
+
+	public get azurePortalEndpoint() {
+		return this.options['azurePortalEndpoint'];
+	}
+
+	public set azurePortalEndpoint(value: string | undefined) {
+		this.options['azurePortalEndpoint'] = value;
+	}
+
+	public get azureResourceId() {
+		return this.options['azureResourceId'];
+	}
+
+	public set azureResourceId(value: string | undefined) {
+		this.options['azureResourceId'] = value;
+	}
+
 	public get registeredServerDescription(): string {
 		return this.options['registeredServerDescription'];
 	}
@@ -119,11 +151,11 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 		this.options['registeredServerDescription'] = value;
 	}
 
-	public get groupFullName(): string {
+	public get groupFullName(): string | undefined {
 		return this._groupName;
 	}
 
-	public set groupFullName(value: string) {
+	public set groupFullName(value: string | undefined) {
 		this._groupName = value;
 	}
 
@@ -195,7 +227,10 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 			options: this.options,
 			saveProfile: this.saveProfile,
 			id: this.id,
-			azureTenantId: this.azureTenantId
+			azureTenantId: this.azureTenantId,
+			azureAccount: this.azureAccount,
+			azurePortalEndpoint: this.azurePortalEndpoint,
+			azureResourceId: this.azureResourceId
 		};
 
 		return result;
@@ -214,15 +249,12 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 		return !profile.databaseName || profile.databaseName.trim() === '';
 	}
 
-	public static fromIConnectionProfile(capabilitiesService: ICapabilitiesService, profile: azdata.IConnectionProfile) {
-		if (profile) {
-			if (profile instanceof ConnectionProfile) {
-				return profile;
-			} else {
-				return new ConnectionProfile(capabilitiesService, profile);
-			}
+	public static fromIConnectionProfile(capabilitiesService: ICapabilitiesService, profile: azdata.IConnectionProfile): ConnectionProfile {
+		if (profile instanceof ConnectionProfile) {
+			return profile;
+		} else {
+			return new ConnectionProfile(capabilitiesService, profile);
 		}
-		return undefined;
 	}
 
 	public static createFromStoredProfile(profile: interfaces.IConnectionProfileStore, capabilitiesService: ICapabilitiesService): ConnectionProfile {
@@ -244,24 +276,18 @@ export class ConnectionProfile extends ProviderConnectionInfo implements interfa
 
 	public static convertToProfileStore(
 		capabilitiesService: ICapabilitiesService,
-		connectionProfile: interfaces.IConnectionProfile): interfaces.IConnectionProfileStore | undefined {
-		if (connectionProfile) {
-			let connectionInfo = ConnectionProfile.fromIConnectionProfile(capabilitiesService, connectionProfile);
-			if (connectionInfo) {
-				let profile: interfaces.IConnectionProfileStore = {
-					options: {},
-					groupId: connectionProfile.groupId,
-					providerName: connectionInfo.providerName,
-					savePassword: connectionInfo.savePassword,
-					id: connectionInfo.id
-				};
+		connectionProfile: interfaces.IConnectionProfile): interfaces.IConnectionProfileStore {
+		let connectionInfo = ConnectionProfile.fromIConnectionProfile(capabilitiesService, connectionProfile);
+		let profile: interfaces.IConnectionProfileStore = {
+			options: {},
+			groupId: connectionProfile.groupId!,
+			providerName: connectionInfo.providerName,
+			savePassword: connectionInfo.savePassword,
+			id: connectionInfo.id
+		};
 
-				profile.options = connectionInfo.options;
+		profile.options = connectionInfo.options;
 
-				return profile;
-			}
-		}
-
-		return undefined;
+		return profile;
 	}
 }

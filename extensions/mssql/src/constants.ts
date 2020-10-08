@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
 export const serviceName = 'SQL Tools Service';
 export const providerId = 'MSSQL';
@@ -37,8 +36,10 @@ export const ObjectExplorerService = 'objectexplorer';
 export const CmsService = 'cmsService';
 export const DacFxService = 'dacfxService';
 export const SchemaCompareService = 'schemaCompareService';
+export const LanguageExtensionService = 'languageExtensionService';
 export const objectExplorerPrefix: string = 'objectexplorer://';
 export const ViewType = 'view';
+export const SqlAssessmentService = 'sqlAssessmentService';
 
 export enum BuiltInCommands {
 	SetContext = 'setContext'
@@ -64,7 +65,7 @@ export enum MssqlClusterItemsSubType {
 // SPARK JOB SUBMISSION //////////////////////////////////////////////////////////
 export const mssqlClusterNewNotebookTask = 'mssqlCluster.task.newNotebook';
 export const mssqlClusterOpenNotebookTask = 'mssqlCluster.task.openNotebook';
-export const mssqlopenClusterStatusNotebook = 'mssqlCluster.task.openClusterStatusNotebook';
+export const mssqlOpenClusterDashboard = 'mssqlCluster.task.openClusterDashboard';
 export const mssqlClusterLivySubmitSparkJobCommand = 'mssqlCluster.livy.cmd.submitSparkJob';
 export const mssqlClusterLivySubmitSparkJobFromFileCommand = 'mssqlCluster.livy.cmd.submitFileToSparkJob';
 export const mssqlClusterLivySubmitSparkJobTask = 'mssqlCluster.livy.task.submitSparkJob';

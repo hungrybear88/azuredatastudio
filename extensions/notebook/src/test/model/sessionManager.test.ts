@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as should from 'should';
 import * as TypeMoq from 'typemoq';
 import { nb } from 'azdata';
@@ -85,7 +83,7 @@ describe('Jupyter Session Manager', function (): void {
 		mockJupyterManager.setup(m => m.startNew(TypeMoq.It.isAny())).returns(() => Promise.resolve(expectedSessionInfo));
 
 		// When I call startSession
-		let session = await sessionManager.startNew(sessionOptions);
+		let session = await sessionManager.startNew(sessionOptions, true);
 		// Then I expect the parameters passed to be correct
 		should(session.path).equal(sessionOptions.path);
 		should(session.canChangeKernels).be.true();
@@ -110,7 +108,7 @@ describe('Jupyter Session', function (): void {
 
 	beforeEach(() => {
 		mockJupyterSession = TypeMoq.Mock.ofType(SessionStub);
-		session = new JupyterSession(mockJupyterSession.object);
+		session = new JupyterSession(mockJupyterSession.object, undefined, true);
 	});
 
 	it('should always be able to change kernels', function (): void {
@@ -147,7 +145,7 @@ describe('Jupyter Session', function (): void {
 		kernel = session.kernel;
 		// Then I expect it to have the ID, and only be called once
 		should(kernel.id).equal('id');
-		mockJupyterSession.verify(s => s.kernel, TypeMoq.Times.once());
+		mockJupyterSession.verify(s => s.kernel, TypeMoq.Times.exactly(1));
 	});
 
 	it('should send name in changeKernel request', async function (): Promise<void> {

@@ -4,25 +4,34 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as azdata from 'azdata';
+import * as fs from 'fs';
+import * as os from 'os';
+import { join } from 'path';
 import * as vscode from 'vscode';
-import { SummaryPage } from './pages/summaryPage';
-import { WizardBase } from '../wizardBase';
 import * as nls from 'vscode-nls';
-import { WizardInfo, BdcDeploymentType } from '../../interfaces';
+import { BdcDeploymentType, BdcWizardInfo } from '../../interfaces';
+import { IAzdataService } from '../../services/azdataService';
+import { IKubeService } from '../../services/kubeService';
+import { INotebookService } from '../../services/notebookService';
+import { IToolsService } from '../../services/toolsService';
+import { getErrorMessage } from '../../utils';
+import { InputComponents } from '../modelViewUtils';
+import { WizardBase } from '../wizardBase';
 import { WizardPageBase } from '../wizardPageBase';
+import * as VariableNames from './constants';
+import { AuthenticationMode, DeployClusterWizardModel } from './deployClusterWizardModel';
 import { AzureSettingsPage } from './pages/azureSettingsPage';
 import { ClusterSettingsPage } from './pages/clusterSettingsPage';
-import { ServiceSettingsPage } from './pages/serviceSettingsPage';
-import { TargetClusterContextPage } from './pages/targetClusterPage';
-import { IKubeService } from '../../services/kubeService';
-import { IAzdataService } from '../../services/azdataService';
 import { DeploymentProfilePage } from './pages/deploymentProfilePage';
-import { INotebookService } from '../../services/notebookService';
-import { DeployClusterWizardModel } from './deployClusterWizardModel';
-import * as VariableNames from './constants';
+import { ServiceSettingsPage } from './pages/serviceSettingsPage';
+import { SummaryPage } from './pages/summaryPage';
+import { TargetClusterContextPage } from './pages/targetClusterPage';
 const localize = nls.loadMessageBundle();
 
-export class DeployClusterWizard extends WizardBase<DeployClusterWizard, DeployClusterWizardModel> {
+export class DeployClusterWizard extends WizardBase<DeployClusterWizard, WizardPageBase<DeployClusterWizard>, DeployClusterWizardModel> {
+	private _inputComponents: InputComponents = {};
+
+	private _saveConfigButton: azdata.window.Button;
 
 	public get kubeService(): IKubeService {
 		return this._kubeService;
@@ -36,8 +45,24 @@ export class DeployClusterWizard extends WizardBase<DeployClusterWizard, DeployC
 		return this._notebookService;
 	}
 
-	constructor(private wizardInfo: WizardInfo, private _kubeService: IKubeService, private _azdataService: IAzdataService, private _notebookService: INotebookService) {
+	public get inputComponents(): InputComponents {
+		return this._inputComponents;
+	}
+
+	public showCustomButtons(): void {
+		this._saveConfigButton.hidden = false;
+	}
+
+	public hideCustomButtons(): void {
+		this._saveConfigButton.hidden = true;
+	}
+
+	constructor(private wizardInfo: BdcWizardInfo, private _kubeService: IKubeService, private _azdataService: IAzdataService, private _notebookService: INotebookService, private _toolsService: IToolsService) {
 		super(DeployClusterWizard.getTitle(wizardInfo.type), new DeployClusterWizardModel(wizardInfo.type));
+		this._saveConfigButton = azdata.window.createButton(localize('deployCluster.SaveConfigFiles', "Save config files"), 'left');
+		this._saveConfigButton.hidden = true;
+		this.addButton(this._saveConfigButton);
+		this.registerDisposable(this._saveConfigButton.onClick(() => this.saveConfigFiles()));
 	}
 
 	public get deploymentType(): BdcDeploymentType {
@@ -47,24 +72,14 @@ export class DeployClusterWizard extends WizardBase<DeployClusterWizard, DeployC
 	protected initialize(): void {
 		this.setPages(this.getPages());
 		this.wizardObject.generateScriptButton.hidden = true;
-		this.wizardObject.doneButton.label = localize('deployCluster.ScriptToNotebook', 'Script to Notebook');
+		this.wizardObject.doneButton.label = localize('deployCluster.ScriptToNotebook', "Script to Notebook");
 	}
 
 	protected onCancel(): void {
 	}
 
-	protected onOk(): void {
-		process.env[VariableNames.AdminPassword_VariableName] = this.model.getStringValue(VariableNames.AdminPassword_VariableName);
-		this.notebookService.launchNotebook(this.wizardInfo.notebook).then((notebook: azdata.nb.NotebookEditor) => {
-			notebook.edit((editBuilder: azdata.nb.NotebookEditorEdit) => {
-				editBuilder.insertCell({
-					cell_type: 'code',
-					source: this.model.getCodeCellContentForNotebook()
-				}, 7);
-			});
-		}, (error) => {
-			vscode.window.showErrorMessage(error);
-		});
+	protected async onOk(): Promise<void> {
+		await this.scriptToNotebook();
 	}
 
 	private getPages(): WizardPageBase<DeployClusterWizard>[] {
@@ -98,6 +113,54 @@ export class DeployClusterWizard extends WizardBase<DeployClusterWizard, DeployC
 				throw new Error(`Unknown deployment type: ${this.deploymentType}`);
 		}
 		return pages;
+	}
+
+	private async saveConfigFiles(): Promise<void> {
+		const options: vscode.OpenDialogOptions = {
+			defaultUri: vscode.Uri.file(os.homedir()),
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			openLabel: localize('deployCluster.SelectConfigFileFolder', "Save config files")
+		};
+		const pathArray = await vscode.window.showOpenDialog(options);
+		if (pathArray && pathArray[0]) {
+			const targetFolder = pathArray[0].fsPath;
+			try {
+				const profile = this.model.createTargetProfile();
+				await fs.promises.writeFile(join(targetFolder, 'bdc.json'), profile.getBdcJson());
+				await fs.promises.writeFile(join(targetFolder, 'control.json'), profile.getControlJson());
+				this.wizardObject.message = {
+					text: localize('deployCluster.SaveConfigFileSucceeded', "Config files saved to {0}", targetFolder),
+					level: azdata.window.MessageLevel.Information
+				};
+			}
+			catch (error) {
+				this.wizardObject.message = {
+					text: error.message,
+					level: azdata.window.MessageLevel.Error
+				};
+			}
+		}
+	}
+
+	private async scriptToNotebook(): Promise<void> {
+		this.setEnvironmentVariables(process.env);
+		const variableValueStatements = this.model.getCodeCellContentForNotebook(this._toolsService.toolsForCurrentProvider);
+		const insertionPosition = 5; // Cell number 5 is the position where the python variable setting statements need to be inserted in this.wizardInfo.notebook.
+		try {
+			await this.notebookService.launchNotebookWithEdits(this.wizardInfo.notebook, variableValueStatements, insertionPosition);
+		} catch (error) {
+			vscode.window.showErrorMessage(getErrorMessage(error));
+		}
+	}
+
+	private setEnvironmentVariables(env: NodeJS.ProcessEnv): void {
+		env[VariableNames.AdminPassword_VariableName] = this.model.getStringValue(VariableNames.AdminPassword_VariableName);
+		env[VariableNames.DockerPassword_VariableName] = this.model.getStringValue(VariableNames.DockerPassword_VariableName);
+		if (this.model.authenticationMode === AuthenticationMode.ActiveDirectory) {
+			env[VariableNames.DomainServiceAccountPassword_VariableName] = this.model.getStringValue(VariableNames.DomainServiceAccountPassword_VariableName);
+		}
 	}
 
 	static getTitle(type: BdcDeploymentType): string {

@@ -11,18 +11,21 @@ import * as azdata from 'azdata';
 import * as DOM from 'vs/base/browser/dom';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { ITextModel } from 'vs/editor/common/model';
-import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
 import { URI } from 'vs/base/common/uri';
 import { Schemas } from 'vs/base/common/network';
 import { IModeService } from 'vs/editor/common/services/modeService';
 import { IModelService } from 'vs/editor/common/services/modelService';
 
 import { ComponentBase } from 'sql/workbench/browser/modelComponents/componentBase';
-import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/workbench/browser/modelComponents/interfaces';
 import { QueryTextEditor } from 'sql/workbench/browser/modelComponents/queryTextEditor';
+import { ILogService } from 'vs/platform/log/common/log';
+import { UntitledTextEditorInput } from 'vs/workbench/services/untitled/common/untitledTextEditorInput';
 import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
-import { SimpleEditorProgressService } from 'vs/editor/standalone/browser/simpleServices';
-import { IProgressService } from 'vs/platform/progress/common/progress';
+import { IEditorProgressService } from 'vs/platform/progress/common/progress';
+import { SimpleProgressIndicator } from 'sql/workbench/services/progress/browser/simpleProgressIndicator';
+import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/platform/dashboard/browser/interfaces';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { convertSizeToNumber } from 'sql/base/browser/dom';
 
 @Component({
 	template: '',
@@ -32,7 +35,7 @@ export default class EditorComponent extends ComponentBase implements IComponent
 	@Input() descriptor: IComponentDescriptor;
 	@Input() modelStore: IModelStore;
 	private _editor: QueryTextEditor;
-	private _editorInput: UntitledEditorInput;
+	private _editorInput: UntitledTextEditorInput;
 	private _editorModel: ITextModel;
 	private _renderedContent: string;
 	private _languageMode: string;
@@ -45,33 +48,34 @@ export default class EditorComponent extends ComponentBase implements IComponent
 		@Inject(forwardRef(() => ElementRef)) el: ElementRef,
 		@Inject(IInstantiationService) private _instantiationService: IInstantiationService,
 		@Inject(IModelService) private _modelService: IModelService,
-		@Inject(IModeService) private _modeService: IModeService
+		@Inject(IModeService) private _modeService: IModeService,
+		@Inject(ILogService) private _logService: ILogService,
+		@Inject(IEditorService) private readonly editorService: IEditorService
 	) {
 		super(changeRef, el);
 	}
 
 	ngOnInit(): void {
 		this.baseInit();
-		this._createEditor();
+		this._createEditor().catch((e) => this._logService.error(e));
 		this._register(DOM.addDisposableListener(window, DOM.EventType.RESIZE, e => {
 			this.layout();
 		}));
 	}
 
-	private _createEditor(): void {
-		let instantiationService = this._instantiationService.createChild(new ServiceCollection([IProgressService, new SimpleEditorProgressService()]));
-		this._editor = instantiationService.createInstance(QueryTextEditor);
+	private async _createEditor(): Promise<void> {
+		const customInstan = this._instantiationService.createChild(new ServiceCollection([IEditorProgressService, new SimpleProgressIndicator()]));
+		this._editor = customInstan.createInstance(QueryTextEditor);
 		this._editor.create(this._el.nativeElement);
 		this._editor.setVisible(true);
 		let uri = this.createUri();
-		this._editorInput = instantiationService.createInstance(UntitledEditorInput, uri, false, 'plaintext', '', '');
-		this._editor.setInput(this._editorInput, undefined);
-		this._editorInput.resolve().then(model => {
-			this._editorModel = model.textEditorModel;
-			this.fireEvent({
-				eventType: ComponentEventType.onComponentCreated,
-				args: this._uri
-			});
+		this._editorInput = this.editorService.createEditorInput({ forceUntitled: true, resource: uri, mode: 'plaintext' }) as UntitledTextEditorInput;
+		await this._editor.setInput(this._editorInput, undefined);
+		const model = await this._editorInput.resolve();
+		this._editorModel = model.textEditorModel;
+		this.fireEvent({
+			eventType: ComponentEventType.onComponentCreated,
+			args: this._uri
 		});
 
 		this._register(this._editor);
@@ -108,9 +112,9 @@ export default class EditorComponent extends ComponentBase implements IComponent
 	/// IComponent implementation
 
 	public layout(): void {
-		let width: number = this.convertSizeToNumber(this.width);
+		let width: number = convertSizeToNumber(this.width);
 
-		let height: number = this.convertSizeToNumber(this.height);
+		let height: number = convertSizeToNumber(this.height);
 		if (this._isAutoResizable) {
 			this._editor.setHeightToScrollHeight();
 			height = Math.max(this._editor.scrollHeight, this._minimumHeight ? this._minimumHeight : 0);

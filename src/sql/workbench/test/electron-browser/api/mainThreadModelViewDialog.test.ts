@@ -8,8 +8,8 @@ import { Mock, It, Times } from 'typemoq';
 import { MainThreadModelViewDialog } from 'sql/workbench/api/browser/mainThreadModelViewDialog';
 import { IExtHostContext } from 'vs/workbench/api/common/extHost.protocol';
 import { IModelViewButtonDetails, IModelViewTabDetails, IModelViewDialogDetails, IModelViewWizardPageDetails, IModelViewWizardDetails, DialogMessage, MessageLevel } from 'sql/workbench/api/common/sqlExtHostTypes';
-import { CustomDialogService } from 'sql/platform/dialog/browser/customDialogService';
-import { Dialog, DialogTab, Wizard } from 'sql/platform/dialog/common/dialogTypes';
+import { CustomDialogService } from 'sql/workbench/services/dialog/browser/customDialogService';
+import { Dialog, DialogTab, Wizard } from 'sql/workbench/services/dialog/common/dialogTypes';
 import { ExtHostModelViewDialogShape } from 'sql/workbench/api/common/sqlExtHost.protocol';
 import { Emitter } from 'vs/base/common/event';
 
@@ -65,7 +65,7 @@ suite('MainThreadModelViewDialog Tests', () => {
 		let extHostContext = <IExtHostContext>{
 			getProxy: proxyType => mockExtHostModelViewDialog.object
 		};
-		mainThreadModelViewDialog = new MainThreadModelViewDialog(extHostContext, undefined, undefined, undefined);
+		mainThreadModelViewDialog = new MainThreadModelViewDialog(extHostContext, undefined, undefined);
 
 		// Set up the mock dialog service
 		mockDialogService = Mock.ofType(CustomDialogService, undefined);
@@ -73,7 +73,7 @@ suite('MainThreadModelViewDialog Tests', () => {
 		mockDialogService.setup(x => x.showDialog(It.isAny(), undefined, It.isAny())).callback((dialog) => {
 			openedDialog = dialog;
 		});
-		mockDialogService.setup(x => x.showWizard(It.isAny())).callback(wizard => {
+		mockDialogService.setup(x => x.showWizard(It.isAny(), It.isAny())).callback(wizard => {
 			openedWizard = wizard;
 			// The actual service will set the page to 0 when it opens the wizard
 			openedWizard.setCurrentPage(0);
@@ -111,7 +111,7 @@ suite('MainThreadModelViewDialog Tests', () => {
 		};
 		dialogDetails = {
 			title: 'dialog1',
-			isWide: false,
+			width: 'narrow',
 			content: [tab1Handle, tab2Handle],
 			okButton: okButtonHandle,
 			cancelButton: cancelButtonHandle,
@@ -160,7 +160,8 @@ suite('MainThreadModelViewDialog Tests', () => {
 			customButtons: [],
 			pages: [page1Handle, page2Handle],
 			message: undefined,
-			displayPageTitles: false
+			displayPageTitles: false,
+			width: 'wide'
 		};
 
 		// Register the buttons, tabs, and dialog
@@ -242,7 +243,7 @@ suite('MainThreadModelViewDialog Tests', () => {
 		mainThreadModelViewDialog.$openWizard(wizardHandle);
 
 		// Then the opened wizard's content and buttons match what was set
-		mockDialogService.verify(x => x.showWizard(It.isAny()), Times.once());
+		mockDialogService.verify(x => x.showWizard(It.isAny(), It.isAny()), Times.once());
 		assert.notEqual(openedWizard, undefined);
 		assert.equal(openedWizard.title, wizardDetails.title);
 		assert.equal(openedWizard.doneButton.label, okButtonDetails.label);

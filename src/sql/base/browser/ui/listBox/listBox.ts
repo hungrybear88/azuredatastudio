@@ -60,11 +60,11 @@ export class ListBox extends SelectBox {
 		this.contextViewProvider = contextViewProvider;
 		this.isValid = true;
 		this.selectElement.multiple = true;
-		this.selectElement.style['height'] = '80px';
+		this.selectElement.style.height = '80px';
 
 		// Set width style for horizontal scrollbar
-		this.selectElement.style['width'] = 'inherit';
-		this.selectElement.style['min-width'] = '100%';
+		this.selectElement.style.width = 'inherit';
+		this.selectElement.style.minWidth = '100%';
 
 		this._register(dom.addStandardDisposableListener(this.selectElement, dom.EventType.KEY_DOWN, (e: StandardKeyboardEvent) => this._onKeyDown.fire(e)));
 
@@ -120,7 +120,7 @@ export class ListBox extends SelectBox {
 			this.selectElement.style.border = `1px solid ${this.selectBorder}`;
 		} else if (this.message) {
 			const styles = this.stylesForType(this.message.type);
-			this.selectElement.style.border = styles.border ? `1px solid ${styles.border}` : null;
+			this.selectElement.style.border = styles.border ? `1px solid ${styles.border}` : '';
 		}
 	}
 
@@ -224,8 +224,8 @@ export class ListBox extends SelectBox {
 					dom.addClass(spanElement, this.classForType(this.message.type));
 
 					const styles = this.stylesForType(this.message.type);
-					spanElement.style.backgroundColor = styles.background ? styles.background.toString() : null;
-					spanElement.style.border = styles.border ? `1px solid ${styles.border}` : null;
+					spanElement.style.backgroundColor = styles.background ? styles.background.toString() : '';
+					spanElement.style.border = styles.border ? `1px solid ${styles.border}` : '';
 
 					dom.append(div, spanElement);
 				}

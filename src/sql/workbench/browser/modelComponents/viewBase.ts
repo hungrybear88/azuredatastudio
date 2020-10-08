@@ -9,13 +9,13 @@ import { Registry } from 'vs/platform/registry/common/platform';
 import * as nls from 'vs/nls';
 
 import * as azdata from 'azdata';
-import { IModelStore, IComponentDescriptor, IComponent } from './interfaces';
-import { IItemConfig, ModelComponentTypes, IComponentShape } from 'sql/workbench/api/common/sqlExtHostTypes';
-import { IModelView, IModelViewEventArgs } from 'sql/platform/model/browser/modelViewService';
+import { IModelView, IModelViewEventArgs, IComponentShape, IItemConfig } from 'sql/platform/model/browser/modelViewService';
 import { Extensions, IComponentRegistry } from 'sql/platform/dashboard/browser/modelComponentRegistry';
 import { AngularDisposable } from 'sql/base/browser/lifecycle';
 import { ModelStore } from 'sql/workbench/browser/modelComponents/modelStore';
 import { Event, Emitter } from 'vs/base/common/event';
+import { assign } from 'vs/base/common/objects';
+import { IModelStore, IComponentDescriptor, IComponent, ModelComponentTypes } from 'sql/platform/dashboard/browser/interfaces';
 
 const componentRegistry = <IComponentRegistry>Registry.as(Extensions.ComponentContribution);
 
@@ -105,6 +105,13 @@ export abstract class ViewBase extends AngularDisposable implements IModelView {
 		this.queueAction(componentId, (component) => component.setLayout(layout));
 	}
 
+	setItemLayout(containerId: string, itemConfig: IItemConfig): void {
+		let childDescriptor = this.modelStore.getComponentDescriptor(itemConfig.componentShape.id);
+		this.queueAction(containerId, (component) => {
+			component.setItemLayout(childDescriptor, itemConfig.config);
+		});
+	}
+
 	setProperties(componentId: string, properties: { [key: string]: any; }): void {
 		if (!properties) {
 			return;
@@ -125,7 +132,7 @@ export abstract class ViewBase extends AngularDisposable implements IModelView {
 	registerEvent(componentId: string) {
 		this.queueAction(componentId, (component) => {
 			this._register(component.registerEventHandler(e => {
-				let modelViewEvent: IModelViewEventArgs = Object.assign({
+				let modelViewEvent: IModelViewEventArgs = assign({
 					componentId: componentId,
 					isRootComponent: componentId === this.rootDescriptor.id
 				}, e);
@@ -144,5 +151,13 @@ export abstract class ViewBase extends AngularDisposable implements IModelView {
 
 	public setDataProvider(handle: number, componentId: string, context: any): any {
 		return this.queueAction(componentId, (component) => component.setDataProvider(handle, componentId, context));
+	}
+
+	public focus(componentId: string): void {
+		return this.queueAction(componentId, (component) => component.focus());
+	}
+
+	public doAction(componentId: string, action: string, ...args: any[]): void {
+		return this.queueAction(componentId, (component) => component.doAction(action, ...args));
 	}
 }

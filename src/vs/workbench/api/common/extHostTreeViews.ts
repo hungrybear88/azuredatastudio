@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from 'vs/nls';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { basename } from 'vs/base/common/resources';
 import { URI } from 'vs/base/common/uri';
 import { Emitter, Event } from 'vs/base/common/event';
@@ -22,7 +22,6 @@ import { IExtensionDescription } from 'vs/platform/extensions/common/extensions'
 
 // {{SQL CARBON EDIT}}
 import * as azdata from 'azdata';
-import { ITreeItem as sqlITreeItem } from 'sql/workbench/common/views';
 export type TreeItemHandle = string;
 
 function toTreeItemLabel(label: any, extension: IExtensionDescription): ITreeItemLabel | undefined {
@@ -96,12 +95,10 @@ export class ExtHostTreeViews implements ExtHostTreeViewsShape {
 			get onDidChangeVisibility() { return treeView.onDidChangeVisibility; },
 			get message() { return treeView.message; },
 			set message(message: string) {
-				checkProposedApiEnabled(extension);
 				treeView.message = message;
 			},
 			get title() { return treeView.title; },
 			set title(title: string) {
-				checkProposedApiEnabled(extension);
 				treeView.title = title;
 			},
 			reveal: (element: T, options?: IRevealOptions): Promise<void> => {
@@ -158,7 +155,7 @@ export class ExtHostTreeViews implements ExtHostTreeViewsShape {
 	}
 }
 
-type Root = null | undefined;
+export type Root = null | undefined | void; // {{SQL CARBON EDIT}} export interface
 type TreeData<T> = { message: boolean, element: T | Root | false };
 
 export interface TreeNode extends IDisposable { // {{SQL CARBON EDIT}} export interface
@@ -170,8 +167,8 @@ export interface TreeNode extends IDisposable { // {{SQL CARBON EDIT}} export in
 // {{SQL CARBON EDIT}}
 export class ExtHostTreeView<T> extends Disposable {
 
-	private static LABEL_HANDLE_PREFIX = '0';
-	private static ID_HANDLE_PREFIX = '1';
+	private static readonly LABEL_HANDLE_PREFIX = '0';
+	private static readonly ID_HANDLE_PREFIX = '1';
 
 	private readonly dataProvider: vscode.TreeDataProvider<T>;
 
@@ -203,7 +200,13 @@ export class ExtHostTreeView<T> extends Disposable {
 	private refreshPromise: Promise<void> = Promise.resolve();
 	private refreshQueue: Promise<void> = Promise.resolve();
 
-	constructor(private viewId: string, options: vscode.TreeViewOptions<T>, private proxy: MainThreadTreeViewsShape, private commands: CommandsConverter, private logService: ILogService, private extension: IExtensionDescription) {
+	constructor(
+		private viewId: string, options: vscode.TreeViewOptions<T>,
+		private proxy: MainThreadTreeViewsShape,
+		private commands: CommandsConverter,
+		private logService: ILogService,
+		private extension: IExtensionDescription
+	) {
 		super();
 		if (extension.contributes && extension.contributes.views) {
 			for (const location in extension.contributes.views) {
@@ -241,7 +244,7 @@ export class ExtHostTreeView<T> extends Disposable {
 				result.message = true;
 			}
 			return result;
-		}, 200)(({ message, elements }) => {
+		}, 200, true)(({ message, elements }) => {
 			if (elements.length) {
 				this.refreshQueue = this.refreshQueue.then(() => {
 					const _promiseCallback = promiseCallback;
@@ -258,7 +261,7 @@ export class ExtHostTreeView<T> extends Disposable {
 	getChildren(parentHandle: TreeItemHandle | Root): Promise<ITreeItem[]> {
 		const parentElement = parentHandle ? this.getExtensionElement(parentHandle) : undefined;
 		if (parentHandle && !parentElement) {
-			console.error(`No tree item with id \'${parentHandle}\' found.`);
+			this.logService.error(`No tree item with id \'${parentHandle}\' found.`);
 			return Promise.resolve([]);
 		}
 
@@ -426,7 +429,7 @@ export class ExtHostTreeView<T> extends Disposable {
 				// check if an ancestor of extElement is already in the elements to update list
 				let currentNode: TreeNode | undefined = elementNode;
 				while (currentNode && currentNode.parent && !elementsToUpdate.has(currentNode.parent.item.handle)) {
-					const parentElement = this.elements.get(currentNode.parent.item.handle);
+					const parentElement: T | undefined = this.elements.get(currentNode.parent.item.handle);
 					currentNode = parentElement ? this.nodes.get(parentElement) : undefined;
 				}
 				if (currentNode && !currentNode.parent) {
@@ -495,7 +498,7 @@ export class ExtHostTreeView<T> extends Disposable {
 		return node;
 	}
 
-	protected createTreeNode(element: T, extensionTreeItem: azdata.TreeItem, parent: TreeNode | Root): TreeNode { 	// {{SQL CARBON EDIT}} change to protected, change to azdata.TreeItem
+	protected createTreeNode(element: T, extensionTreeItem: azdata.TreeItem2, parent: TreeNode | Root): TreeNode { 	// {{SQL CARBON EDIT}} change to protected, change to azdata.TreeItem
 		const disposable = new DisposableStore();
 		const handle = this.createHandle(element, extensionTreeItem, parent);
 		const icon = this.getLightIconPath(extensionTreeItem);
@@ -512,10 +515,10 @@ export class ExtHostTreeView<T> extends Disposable {
 			iconDark: this.getDarkIconPath(extensionTreeItem) || icon,
 			themeIcon: extensionTreeItem.iconPath instanceof ThemeIcon ? { id: extensionTreeItem.iconPath.id } : undefined,
 			collapsibleState: isUndefinedOrNull(extensionTreeItem.collapsibleState) ? TreeItemCollapsibleState.None : extensionTreeItem.collapsibleState,
-			// {{SQL CARBON EDIT}}
-			payload: extensionTreeItem.payload,
-			childProvider: extensionTreeItem.childProvider,
-			type: extensionTreeItem.type
+			accessibilityInformation: extensionTreeItem.accessibilityInformation,
+			payload: extensionTreeItem.payload, // {{SQL CARBON EDIT}}
+			childProvider: extensionTreeItem.childProvider, // {{SQL CARBON EDIT}}
+			type: extensionTreeItem.type // {{SQL CARBON EDIT}}
 		};
 
 		return {
@@ -557,7 +560,7 @@ export class ExtHostTreeView<T> extends Disposable {
 	private getLightIconPath(extensionTreeItem: vscode.TreeItem): URI | undefined {
 		if (extensionTreeItem.iconPath && !(extensionTreeItem.iconPath instanceof ThemeIcon)) {
 			if (typeof extensionTreeItem.iconPath === 'string'
-				|| extensionTreeItem.iconPath instanceof URI) {
+				|| URI.isUri(extensionTreeItem.iconPath)) {
 				return this.getIconPath(extensionTreeItem.iconPath);
 			}
 			return this.getIconPath((<{ light: string | URI; dark: string | URI }>extensionTreeItem.iconPath).light);
@@ -573,7 +576,7 @@ export class ExtHostTreeView<T> extends Disposable {
 	}
 
 	private getIconPath(iconPath: string | URI): URI {
-		if (iconPath instanceof URI) {
+		if (URI.isUri(iconPath)) {
 			return iconPath;
 		}
 		return URI.file(iconPath);

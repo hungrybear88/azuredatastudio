@@ -3,19 +3,18 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as should from 'should';
 import * as TypeMoq from 'typemoq';
-import * as azdata from 'azdata';
 import 'mocha';
 import { fail } from 'assert';
 
 import { azureResource } from '../../azureResource/azure-resource';
 import { AzureResourceService } from '../../azureResource/resourceService';
+import { AzureAccount } from '../../account-provider/interfaces';
+import settings from '../../account-provider/providerSettings';
 
 // Mock test data
-const mockAccount: azdata.Account = {
+const mockAccount: AzureAccount = {
 	key: {
 		accountId: 'mock_account',
 		providerId: 'mock_provider'
@@ -26,7 +25,11 @@ const mockAccount: azdata.Account = {
 		contextualDisplayName: 'test',
 		userId: 'test@email.com'
 	},
-	properties: undefined,
+	properties: {
+		providerSettings: settings[0].metadata,
+		isMsAccount: true,
+		tenants: []
+	},
 	isStale: false
 };
 

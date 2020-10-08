@@ -9,10 +9,11 @@ import {
 	ElementRef, OnDestroy
 } from '@angular/core';
 
-import { IComponent, IComponentDescriptor, IModelStore } from 'sql/workbench/browser/modelComponents/interfaces';
 import { FlexLayout, FlexItemLayout } from 'azdata';
 
 import { ContainerBase } from 'sql/workbench/browser/modelComponents/componentBase';
+import { IComponentDescriptor, IComponent, IModelStore } from 'sql/platform/dashboard/browser/interfaces';
+import { convertSize } from 'sql/base/browser/dom';
 
 export class FlexItem {
 	constructor(public descriptor: IComponentDescriptor, public config: FlexItemLayout) { }
@@ -20,8 +21,8 @@ export class FlexItem {
 
 @Component({
 	template: `
-		<div *ngIf="items" class="flexContainer" [style.flexFlow]="flexFlow" [style.justifyContent]="justifyContent" [style.position]="position"
-				[style.alignItems]="alignItems" [style.alignContent]="alignContent" [style.height]="height" [style.width]="width" [style.flex-wrap]="flexWrap">
+		<div *ngIf="items" class="flexContainer" [ngStyle]="CSSStyles" [style.display]="display" [style.flexFlow]="flexFlow" [style.justifyContent]="justifyContent" [style.position]="position"
+				[style.alignItems]="alignItems" [style.alignContent]="alignContent" [style.height]="height" [style.width]="width" [style.flex-wrap]="flexWrap" [attr.role]="ariaRole">
 			<div *ngFor="let item of items" [style.flex]="getItemFlex(item)" [style.textAlign]="textAlign" [style.order]="getItemOrder(item)" [ngStyle]="getItemStyles(item)">
 				<model-component-wrapper [descriptor]="item.descriptor" [modelStore]="modelStore">
 				</model-component-wrapper>
@@ -69,8 +70,8 @@ export default class FlexContainer extends ContainerBase<FlexItemLayout> impleme
 		this._alignContent = layout.alignContent ? layout.alignContent : '';
 		this._textAlign = layout.textAlign ? layout.textAlign : '';
 		this._position = layout.position ? layout.position : '';
-		this._height = this.convertSize(layout.height);
-		this._width = this.convertSize(layout.width);
+		this._height = convertSize(layout.height);
+		this._width = convertSize(layout.width);
 		this._flexWrap = layout.flexWrap ? layout.flexWrap : '';
 
 		this.layout();
@@ -113,13 +114,13 @@ export default class FlexContainer extends ContainerBase<FlexItemLayout> impleme
 		return this._flexWrap;
 	}
 
-	private getItemFlex(item: FlexItem): string {
+	public getItemFlex(item: FlexItem): string {
 		return item.config ? item.config.flex : '1 1 auto';
 	}
-	private getItemOrder(item: FlexItem): number {
+	public getItemOrder(item: FlexItem): number {
 		return item.config ? item.config.order : 0;
 	}
-	private getItemStyles(item: FlexItem): { [key: string]: string } {
+	public getItemStyles(item: FlexItem): { [key: string]: string } {
 		return item.config && item.config.CSSStyles ? item.config.CSSStyles : {};
 	}
 }

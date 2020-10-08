@@ -11,7 +11,7 @@ import { ConnectionProvider } from './providers/connectionProvider';
 import { StatusProvider, LiveShareDocumentState } from './providers/statusProvider';
 import { QueryProvider } from './providers/queryProvider';
 
-declare var require: any;
+declare let require: any;
 let vsls = require('vsls');
 
 export class GuestSessionManager {
@@ -55,7 +55,7 @@ export class GuestSessionManager {
 			if (documentState) {
 				let queryDocument = await azdata.queryeditor.getQueryDocument(doc.uri.toString());
 				if (queryDocument) {
-					let connectionOptions: Map<string, any> = new Map<string, any>();
+					let connectionOptions: { [key: string]: any } = {};
 					connectionOptions['providerName'] = LiveShareProviderId;
 					connectionOptions['serverName'] = documentState.serverName;
 					connectionOptions['databaseName'] = documentState.databaseName;

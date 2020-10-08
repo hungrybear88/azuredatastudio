@@ -3,14 +3,11 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
 import * as azdata from 'azdata';
-import * as nls from 'vscode-nls';
+import * as loc from '../../localizedConstants';
 import { DacFxDataModel } from '../api/models';
 import { DataTierApplicationWizard, Operation, DeployOperationPath, ExtractOperationPath, ImportOperationPath, ExportOperationPath, PageName } from '../dataTierApplicationWizard';
 import { BasePage } from '../api/basePage';
-
-const localize = nls.loadMessageBundle();
 
 export class SelectOperationPage extends BasePage {
 
@@ -39,10 +36,6 @@ export class SelectOperationPage extends BasePage {
 		let importComponent = await this.createImportRadioButton();
 		let exportComponent = await this.createExportRadioButton();
 
-		// default have the first radio button checked
-		this.deployRadioButton.checked = true;
-		this.deployRadioButton.focused = true;
-
 		this.form = this.view.modelBuilder.formContainer()
 			.withFormItems(
 				[
@@ -55,6 +48,7 @@ export class SelectOperationPage extends BasePage {
 			}).component();
 		await this.view.initializeModel(this.form);
 
+		this.deployRadioButton.focus();
 		this.instance.setDoneButton(Operation.deploy);
 		return true;
 	}
@@ -67,7 +61,8 @@ export class SelectOperationPage extends BasePage {
 		this.deployRadioButton = this.view.modelBuilder.radioButton()
 			.withProperties({
 				name: 'selectedOperation',
-				label: localize('dacFx.deployRadioButtonLabel', 'Deploy a data-tier application .dacpac file to an instance of SQL Server [Deploy Dacpac]'),
+				label: loc.deployDescription,
+				checked: true // Default to first radio button being selected
 			}).component();
 
 		this.deployRadioButton.onDidClick(() => {
@@ -94,7 +89,7 @@ export class SelectOperationPage extends BasePage {
 		this.extractRadioButton = this.view.modelBuilder.radioButton()
 			.withProperties({
 				name: 'selectedOperation',
-				label: localize('dacFx.extractRadioButtonLabel', 'Extract a data-tier application from an instance of SQL Server to a .dacpac file [Extract Dacpac]'),
+				label: loc.extractDescription,
 			}).component();
 
 		this.extractRadioButton.onDidClick(() => {
@@ -119,7 +114,7 @@ export class SelectOperationPage extends BasePage {
 		this.importRadioButton = this.view.modelBuilder.radioButton()
 			.withProperties({
 				name: 'selectedOperation',
-				label: localize('dacFx.importRadioButtonLabel', 'Create a database from a .bacpac file [Import Bacpac]'),
+				label: loc.importDescription,
 			}).component();
 
 		this.importRadioButton.onDidClick(() => {
@@ -144,7 +139,7 @@ export class SelectOperationPage extends BasePage {
 		this.exportRadioButton = this.view.modelBuilder.radioButton()
 			.withProperties({
 				name: 'selectedOperation',
-				label: localize('dacFx.exportRadioButtonLabel', 'Export the schema and data from a database to the logical .bacpac file format [Export Bacpac]'),
+				label: loc.exportDescription,
 			}).component();
 
 		this.exportRadioButton.onDidClick(() => {
@@ -177,7 +172,7 @@ export class SelectOperationPage extends BasePage {
 		this.instance.wizard.addPage(summaryPage.wizardPage, index);
 	}
 
-	public setupNavigationValidator() {
+	public setupNavigationValidator(): void {
 		this.instance.registerNavigationValidator(() => {
 			return true;
 		});

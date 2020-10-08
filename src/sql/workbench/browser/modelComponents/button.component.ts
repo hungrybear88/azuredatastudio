@@ -11,7 +11,6 @@ import {
 import * as azdata from 'azdata';
 
 import { ComponentWithIconBase } from 'sql/workbench/browser/modelComponents/componentWithIconBase';
-import { IComponent, IComponentDescriptor, IModelStore, ComponentEventType } from 'sql/workbench/browser/modelComponents/interfaces';
 import { attachButtonStyler } from 'sql/platform/theme/common/styler';
 
 import { SIDE_BAR_BACKGROUND, SIDE_BAR_TITLE_FOREGROUND } from 'vs/workbench/common/theme';
@@ -19,6 +18,8 @@ import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/work
 import { focusBorder, foreground } from 'vs/platform/theme/common/colorRegistry';
 import { Button } from 'sql/base/browser/ui/button/button';
 import { Color } from 'vs/base/common/color';
+import { IComponentDescriptor, IComponent, IModelStore, ComponentEventType } from 'sql/platform/dashboard/browser/interfaces';
+import { convertSize } from 'sql/base/browser/dom';
 
 @Component({
 	selector: 'modelview-button',
@@ -36,7 +37,7 @@ export default class ButtonComponent extends ComponentWithIconBase implements IC
 	@Input() descriptor: IComponentDescriptor;
 	@Input() modelStore: IModelStore;
 	private _button: Button;
-	private fileType: string = '.sql';
+	public fileType: string = '.sql';
 
 	@ViewChild('input', { read: ElementRef }) private _inputContainer: ElementRef;
 	@ViewChild('fileInput', { read: ElementRef }) private _fileInputContainer: ElementRef;
@@ -116,13 +117,17 @@ export default class ButtonComponent extends ComponentWithIconBase implements IC
 		}
 
 		if (this.width) {
-			this._button.setWidth(this.convertSize(this.width.toString()));
+			this._button.setWidth(convertSize(this.width.toString()));
 		}
 		if (this.height) {
-			this._button.setWidth(this.convertSize(this.height.toString()));
+			this._button.setHeight(convertSize(this.height.toString()));
 		}
 		this.updateIcon();
 		this._changeRef.detectChanges();
+	}
+
+	public focus(): void {
+		this._button.focus();
 	}
 
 	protected updateIcon() {
@@ -153,11 +158,11 @@ export default class ButtonComponent extends ComponentWithIconBase implements IC
 		this.setPropertyFromUI<azdata.ButtonProperties, string>(this.setValueProperties, newValue);
 	}
 
-	private get isFile(): boolean {
+	public get isFile(): boolean {
 		return this.getPropertyOrDefault<azdata.ButtonProperties, boolean>((props) => props.isFile, false);
 	}
 
-	private set isFile(newValue: boolean) {
+	public set isFile(newValue: boolean) {
 		this.setPropertyFromUI<azdata.ButtonProperties, boolean>(this.setFileProperties, newValue);
 	}
 
@@ -179,25 +184,5 @@ export default class ButtonComponent extends ComponentWithIconBase implements IC
 
 	private setFileProperties(properties: azdata.ButtonProperties, isFile: boolean): void {
 		properties.isFile = isFile;
-	}
-
-	private get title(): string {
-		return this.getPropertyOrDefault<azdata.ButtonProperties, string>((props) => props.title, '');
-	}
-
-	private set title(newValue: string) {
-		this.setPropertyFromUI<azdata.ButtonProperties, string>((properties, title) => { properties.title = title; }, newValue);
-	}
-
-	private setFileType(value: string) {
-		this.properties.fileType = value;
-	}
-
-	private get ariaLabel(): string {
-		return this.getPropertyOrDefault<azdata.ButtonProperties, string>((properties) => properties.ariaLabel, '');
-	}
-
-	private set ariaLabel(newValue: string) {
-		this.setPropertyFromUI<azdata.ButtonProperties, string>((properties, ariaLabel) => { properties.ariaLabel = ariaLabel; }, newValue);
 	}
 }

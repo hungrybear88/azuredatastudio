@@ -2,13 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
-import * as vscode from 'vscode';
 
-import ControllerBase from './controllers/controllerBase';
+import * as vscode from 'vscode';
 import MainController from './controllers/mainController';
 
-let controllers: ControllerBase[] = [];
+let controllers: MainController[] = [];
 
 export function activate(context: vscode.ExtensionContext) {
 	let activations: Promise<boolean>[] = [];

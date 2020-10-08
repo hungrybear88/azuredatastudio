@@ -3,8 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import { nb } from 'azdata';
 import * as vscode from 'vscode';
 import { ServerConnection, SessionManager } from '@jupyterlab/services';
@@ -18,11 +16,12 @@ export class JupyterNotebookManager implements nb.NotebookManager, vscode.Dispos
 	private _sessionManager: JupyterSessionManager;
 
 	constructor(private _serverManager: LocalJupyterServerManager, sessionManager?: JupyterSessionManager, private apiWrapper: ApiWrapper = new ApiWrapper()) {
-		this._sessionManager = sessionManager || new JupyterSessionManager();
+		let pythonEnvVarPath = this._serverManager && this._serverManager.jupyterServerInstallation && this._serverManager.jupyterServerInstallation.pythonEnvVarPath;
+		this._sessionManager = sessionManager || new JupyterSessionManager(pythonEnvVarPath);
 		this._serverManager.onServerStarted(() => {
 			this.setServerSettings(this._serverManager.serverSettings);
+			this._sessionManager.installation = this._serverManager.instanceOptions.install;
 		});
-
 	}
 	public get contentManager(): nb.ContentManager {
 		return undefined;

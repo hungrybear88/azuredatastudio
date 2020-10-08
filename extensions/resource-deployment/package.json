@@ -6,14 +6,15 @@
   "publisher": "Microsoft",
   "preview": true,
   "license": "https://raw.githubusercontent.com/Microsoft/azuredatastudio/master/LICENSE.txt",
-  "icon": "images/sqlserver.png",
-  "aiKey": "AIF-444c3af9-8e69-4462-ab49-4191e6ad1916",
+  "icon": "images/extension.png",
+  "aiKey": "AIF-37eefaf0-8022-4671-a3fb-64752724682e",
   "engines": {
     "vscode": "*",
     "azdata": ">=1.6.0"
   },
   "activationEvents": [
-    "*"
+    "onCommand:azdata.resource.deploy",
+    "onCommand:azdata.openNotebookInputDialog"
   ],
   "main": "./out/main",
   "repository": {
@@ -25,17 +26,18 @@
     "microsoft.notebook"
   ],
   "contributes": {
+    "configuration": [
+      {
+        "title": "%deployment.configuration.title%",
+        "properties": {
+          "deployment.azdataInstallLocation": {
+            "type": "string",
+            "description": "%azdata-install-location-description%"
+          }
+        }
+      }
+    ],
     "commands": [
-      {
-        "command": "azdata.resource.sql-image.deploy",
-        "title": "%deploy-sql-image-command-name%",
-        "category": "%deploy-resource-command-category%"
-      },
-      {
-        "command": "azdata.resource.sql-bdc.deploy",
-        "title": "%deploy-sql-bdc-command-name%",
-        "category": "%deploy-resource-command-category%"
-      },
       {
         "command": "azdata.resource.deploy",
         "title": "%deploy-resource-command-name%",
@@ -56,14 +58,6 @@
       ],
       "dataExplorer/action": [
         {
-          "command": "azdata.resource.sql-image.deploy",
-          "group": "secondary"
-        },
-        {
-          "command": "azdata.resource.sql-bdc.deploy",
-          "group": "secondary"
-        },
-        {
           "command": "azdata.resource.deploy",
           "group": "secondary"
         }
@@ -72,6 +66,7 @@
     "resourceDeploymentTypes": [
       {
         "name": "sql-image",
+        "displayIndex": 2,
         "displayName": "%resource-type-sql-image-display-name%",
         "description": "%resource-type-sql-image-description%",
         "platforms": "*",
@@ -85,12 +80,12 @@
             "displayName": "%version-display-name%",
             "values": [
               {
-                "name": "sql2017",
-                "displayName": "%sql-2017-display-name%"
-              },
-              {
                 "name": "sql2019",
                 "displayName": "%sql-2019-display-name%"
+              },
+              {
+                "name": "sql2017",
+                "displayName": "%sql-2017-display-name%"
               }
             ]
           }
@@ -202,6 +197,7 @@
       },
       {
         "name": "sql-bdc",
+        "displayIndex": 3,
         "displayName": "%resource-type-sql-bdc-display-name%",
         "description": "%resource-type-sql-bdc-description%",
         "platforms": "*",
@@ -241,25 +237,27 @@
         ],
         "providers": [
           {
-            "wizard": {
+            "bdcWizard": {
               "type": "new-aks",
               "notebook": "%bdc-2019-aks-notebook%"
             },
             "requiredTools": [
               {
-                "name": "kubectl"
+                "name": "kubectl",
+                "version": "1.13.0"
               },
               {
-                "name": "azcli"
+                "name": "azure-cli"
               },
               {
-                "name": "azdata"
+                "name": "azdata",
+                "version": "15.0.4013"
               }
             ],
             "when": "target=new-aks&&version=bdc2019"
           },
           {
-            "wizard": {
+            "bdcWizard": {
               "type": "existing-aks",
               "notebook": "%bdc-2019-existing-aks-notebook%"
             },
@@ -274,7 +272,7 @@
             "when": "target=existing-aks&&version=bdc2019"
           },
           {
-            "wizard": {
+            "bdcWizard": {
               "type": "existing-kubeadm",
               "notebook": "%bdc-2019-existing-kubeadm-notebook%"
             },
@@ -302,13 +300,14 @@
             },
             {
               "text": "%bdc-agreement-azdata-eula%",
-              "url": "https://aka.ms/azdata-eula"
+              "url": "https://aka.ms/eula-azdata-en"
             }
           ]
         }
       },
       {
         "name": "sql-windows-setup",
+        "displayIndex": 1,
         "displayName": "%resource-type-sql-windows-setup-display-name%",
         "description": "%resource-type-sql-windows-setup-description%",
         "platforms": [
@@ -324,12 +323,12 @@
             "displayName": "%version-display-name%",
             "values": [
               {
-                "name": "sql2017",
-                "displayName": "%sql-2017-display-name%"
-              },
-              {
                 "name": "sql2019",
                 "displayName": "%sql-2019-display-name%"
+              },
+              {
+                "name": "sql2017",
+                "displayName": "%sql-2017-display-name%"
               }
             ]
           }
@@ -341,7 +340,7 @@
             "when": "version=sql2017"
           },
           {
-            "webPageUrl": "https://www.microsoft.com/evalcenter/evaluate-sql-server-2019-rc",
+            "downloadUrl": "https://go.microsoft.com/fwlink/?linkid=866662",
             "requiredTools": [],
             "when": "version=sql2019"
           }
@@ -350,14 +349,19 @@
     ]
   },
   "dependencies": {
+    "linux-release-info": "^2.0.0",
+    "promisify-child-process": "^3.1.1",
+    "sudo-prompt": "9.1.1",
     "vscode-nls": "^4.0.0",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
-    "typemoq": "^2.1.0",
-    "vscode": "^1.1.26",
+    "@types/mocha": "^5.2.5",
     "@types/yamljs": "0.2.30",
+    "mocha": "^5.2.0",
     "mocha-junit-reporter": "^1.17.0",
-    "mocha-multi-reporters": "^1.1.7"
+    "mocha-multi-reporters": "^1.1.7",
+    "typemoq": "^2.1.0",
+    "vscodetestcover": "^1.0.9"
   }
 }

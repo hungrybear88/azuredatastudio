@@ -11,21 +11,22 @@ import {
 import * as azdata from 'azdata';
 
 import { ComponentBase } from 'sql/workbench/browser/modelComponents/componentBase';
-import { IComponent, IComponentDescriptor, IModelStore } from 'sql/workbench/browser/modelComponents/interfaces';
-import * as nls from 'vs/nls';
+import { localize } from 'vs/nls';
+import { IComponent, IComponentDescriptor, IModelStore } from 'sql/platform/dashboard/browser/interfaces';
+import { status } from 'vs/base/browser/ui/aria/aria';
 
 @Component({
 	selector: 'modelview-loadingComponent',
 	template: `
-		<div class="modelview-loadingComponent-container" role="alert" aria-busy="true" *ngIf="loading">
-			<div class="modelview-loadingComponent-spinner" *ngIf="loading" [title]=_loadingTitle #spinnerElement></div>
+		<div class="modelview-loadingComponent-container" aria-busy="true" *ngIf="loading">
+			<div class="modelview-loadingComponent-spinner" [title]="getStatusText()" #spinnerElement></div>
+			<div *ngIf="showText" class="modelview-loadingComponent-status-text">{{getStatusText()}}</div>
 		</div>
 		<model-component-wrapper #childElement [descriptor]="_component" [modelStore]="modelStore" *ngIf="_component" [ngClass]="{'modelview-loadingComponent-content-loading': loading}">
 		</model-component-wrapper>
 	`
 })
 export default class LoadingComponent extends ComponentBase implements IComponent, OnDestroy, AfterViewInit {
-	private readonly _loadingTitle = nls.localize('loadingMessage', "Loading");
 	private _component: IComponentDescriptor;
 
 	@Input() descriptor: IComponentDescriptor;
@@ -63,7 +64,11 @@ export default class LoadingComponent extends ComponentBase implements IComponen
 	}
 
 	public setProperties(properties: { [key: string]: any; }): void {
+		const wasLoading = this.loading;
 		super.setProperties(properties);
+		if (wasLoading && !this.loading) {
+			status(this.getStatusText());
+		}
 	}
 
 	public get loading(): boolean {
@@ -75,8 +80,24 @@ export default class LoadingComponent extends ComponentBase implements IComponen
 		this.layout();
 	}
 
+	public get showText(): boolean {
+		return this.getPropertyOrDefault<azdata.LoadingComponentProperties, boolean>((props) => props.showText, false);
+	}
+
+	public get loadingText(): string {
+		return this.getPropertyOrDefault<azdata.LoadingComponentProperties, string>((props) => props.loadingText, localize('loadingMessage', "Loading"));
+	}
+
+	public get loadingCompletedText(): string {
+		return this.getPropertyOrDefault<azdata.LoadingComponentProperties, string>((props) => props.loadingCompletedText, localize('loadingCompletedMessage', "Loading completed"));
+	}
+
 	public addToContainer(componentDescriptor: IComponentDescriptor): void {
 		this._component = componentDescriptor;
 		this.layout();
+	}
+
+	public getStatusText(): string {
+		return this.loading ? this.loadingText : this.loadingCompletedText;
 	}
 }

@@ -3,28 +3,30 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
+import * as msRest from '@azure/ms-rest-js';
 
-import { ServiceClientCredentials } from 'ms-rest';
 import { Account, DidChangeAccountsParams } from 'azdata';
 import { Event } from 'vscode';
 
 import { azureResource } from './azure-resource';
+import { AzureAccount, AzureAccountSecurityToken, Tenant } from '../account-provider/interfaces';
 
 export interface IAzureResourceAccountService {
 	getAccounts(): Promise<Account[]>;
-
 	readonly onDidChangeAccounts: Event<DidChangeAccountsParams>;
 }
 
 export interface IAzureResourceSubscriptionService {
-	getSubscriptions(account: Account, credential: ServiceClientCredentials): Promise<azureResource.AzureResourceSubscription[]>;
+	getSubscriptions(account: Account, credential: msRest.ServiceClientCredentials): Promise<azureResource.AzureResourceSubscription[]>;
 }
 
 export interface IAzureResourceSubscriptionFilterService {
 	getSelectedSubscriptions(account: Account): Promise<azureResource.AzureResourceSubscription[]>;
-
 	saveSelectedSubscriptions(account: Account, selectedSubscriptions: azureResource.AzureResourceSubscription[]): Promise<void>;
+}
+
+export interface IAzureTerminalService {
+	getOrCreateCloudConsole(account: AzureAccount, tenant: Tenant, tokens: { [key: string]: AzureAccountSecurityToken }): Promise<void>;
 }
 
 export interface IAzureResourceCacheService {
@@ -36,10 +38,14 @@ export interface IAzureResourceCacheService {
 }
 
 export interface IAzureResourceTenantService {
-	getTenantId(subscription: azureResource.AzureResourceSubscription): Promise<string>;
+	getTenantId(subscription: azureResource.AzureResourceSubscription, account: Account, credential: msRest.ServiceClientCredentials): Promise<string>;
 }
 
 export interface IAzureResourceNodeWithProviderId {
 	resourceProviderId: string;
 	resourceNode: azureResource.IAzureResourceNode;
+}
+
+export interface IAzureResourceService<T extends azureResource.AzureResource> {
+	getResources(subscription: azureResource.AzureResourceSubscription, credential: msRest.ServiceClientCredentials, account: Account): Promise<T[]>;
 }

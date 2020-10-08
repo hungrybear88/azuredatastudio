@@ -3,7 +3,6 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
 import * as nls from 'vscode-nls';
 import * as azdata from 'azdata';
 import * as vscode from 'vscode';
@@ -13,9 +12,9 @@ const localize = nls.loadMessageBundle();
 
 export class CreateSessionDialog {
 	// Top level
-	private readonly CancelButtonText: string = localize('createSessionDialog.cancel', 'Cancel');
-	private readonly CreateButtonText: string = localize('createSessionDialog.create', 'Start');
-	private readonly DialogTitleText: string = localize('createSessionDialog.title', 'Start New Profiler Session');
+	private readonly CancelButtonText: string = localize('createSessionDialog.cancel', "Cancel");
+	private readonly CreateButtonText: string = localize('createSessionDialog.create', "Start");
+	private readonly DialogTitleText: string = localize('createSessionDialog.title', "Start New Profiler Session");
 
 	// UI Components
 	private dialog: azdata.window.Dialog;

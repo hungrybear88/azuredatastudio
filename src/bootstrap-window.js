@@ -21,17 +21,16 @@ exports.assign = function assign(destination, source) {
  *
  * @param {string[]} modulePaths
  * @param {(result, configuration: object) => any} resultCallback
- * @param {{ forceEnableDeveloperKeybindings?: boolean, removeDeveloperKeybindingsAfterLoad?: boolean, canModifyDOM?: (config: object) => void, beforeLoaderConfig?: (config: object, loaderConfig: object) => void, beforeRequire?: () => void }=} options
+ * @param {{ forceEnableDeveloperKeybindings?: boolean, disallowReloadKeybinding?: boolean, removeDeveloperKeybindingsAfterLoad?: boolean, canModifyDOM?: (config: object) => void, beforeLoaderConfig?: (config: object, loaderConfig: object) => void, beforeRequire?: () => void }=} options
  */
 exports.load = function (modulePaths, resultCallback, options) {
 
-	// @ts-ignore
 	const webFrame = require('electron').webFrame;
 	const path = require('path');
 
 	const args = parseURLQueryArgs();
 	/**
-	 * // configuration: IWindowConfiguration
+	 * // configuration: INativeWindowConfiguration
 	 * @type {{
 	 * zoomLevel?: number,
 	 * extensionDevelopmentPath?: string[],
@@ -49,7 +48,6 @@ exports.load = function (modulePaths, resultCallback, options) {
 	}
 
 	// Error handler
-	// @ts-ignore
 	process.on('uncaughtException', function (error) {
 		onUnexpectedError(error, enableDeveloperTools);
 	});
@@ -58,7 +56,7 @@ exports.load = function (modulePaths, resultCallback, options) {
 	const enableDeveloperTools = (process.env['VSCODE_DEV'] || !!configuration.extensionDevelopmentPath) && !configuration.extensionTestsPath;
 	let developerToolsUnbind;
 	if (enableDeveloperTools || (options && options.forceEnableDeveloperKeybindings)) {
-		developerToolsUnbind = registerDeveloperKeybindings();
+		developerToolsUnbind = registerDeveloperKeybindings(options && options.disallowReloadKeybinding);
 	}
 
 	// Correctly inherit the parent's environment
@@ -111,6 +109,7 @@ exports.load = function (modulePaths, resultCallback, options) {
 		'@angular/platform-browser-dynamic',
 		'@angular/router',
 		'rxjs/Observable',
+		'rxjs/add/observable/fromPromise',
 		'rxjs/Subject',
 		'rxjs/Observer',
 		'slickgrid/lib/jquery.event.drag-2.3.0',
@@ -161,7 +160,7 @@ exports.load = function (modulePaths, resultCallback, options) {
 		} catch (error) {
 			onUnexpectedError(error, enableDeveloperTools);
 		}
-	});
+	}, onUnexpectedError);
 };
 
 /**
@@ -178,11 +177,11 @@ function parseURLQueryArgs() {
 }
 
 /**
+ * @param {boolean} disallowReloadKeybinding
  * @returns {() => void}
  */
-function registerDeveloperKeybindings() {
+function registerDeveloperKeybindings(disallowReloadKeybinding) {
 
-	// @ts-ignore
 	const ipc = require('electron').ipcRenderer;
 
 	const extractKey = function (e) {
@@ -204,7 +203,7 @@ function registerDeveloperKeybindings() {
 		const key = extractKey(e);
 		if (key === TOGGLE_DEV_TOOLS_KB || key === TOGGLE_DEV_TOOLS_KB_ALT) {
 			ipc.send('vscode:toggleDevTools');
-		} else if (key === RELOAD_KB) {
+		} else if (key === RELOAD_KB && !disallowReloadKeybinding) {
 			ipc.send('vscode:reloadWindow');
 		}
 	};
@@ -221,7 +220,6 @@ function registerDeveloperKeybindings() {
 
 function onUnexpectedError(error, enableDeveloperTools) {
 
-	// @ts-ignore
 	const ipc = require('electron').ipcRenderer;
 
 	if (enableDeveloperTools) {
@@ -230,7 +228,7 @@ function onUnexpectedError(error, enableDeveloperTools) {
 
 	console.error('[uncaught exception]: ' + error);
 
-	if (error.stack) {
+	if (error && error.stack) {
 		console.error(error.stack);
 	}
 }

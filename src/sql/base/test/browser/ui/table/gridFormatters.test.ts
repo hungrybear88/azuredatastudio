@@ -11,11 +11,11 @@ const testText = '<div>test text</div>';
 suite('Grid shared services tests', () => {
 	test('textFormatter should encode HTML when formatting a DBCellValue object', () => {
 		// If I format a DBCellValue object that contains HTML
-		let cellValue = new SharedServices.DBCellValue();
-		cellValue.displayValue = testText;
-		cellValue.isNull = false;
+		let cellValue = {
+			displayValue: testText,
+			isNull: false
+		};
 		let formattedHtml = SharedServices.textFormatter(undefined, undefined, cellValue, undefined, undefined);
-		let hyperlink = SharedServices.hyperLinkFormatter(undefined, undefined, cellValue, undefined, undefined);
 
 		// Then the result is HTML for a span element containing the cell value's display value as plain text
 		verifyFormattedHtml(formattedHtml, testText);

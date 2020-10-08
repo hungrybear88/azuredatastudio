@@ -2,20 +2,22 @@
 
 [![Join the chat at https://gitter.im/Microsoft/sqlopsstudio](https://badges.gitter.im/Microsoft/sqlopsstudio.svg)](https://gitter.im/Microsoft/sqlopsstudio?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://dev.azure.com/azuredatastudio/azuredatastudio/_apis/build/status/Azure%20Data%20Studio%20CI?branchName=master)](https://dev.azure.com/azuredatastudio/azuredatastudio/_build/latest?definitionId=4&branchName=master)
+[![Twitter Follow](https://img.shields.io/twitter/follow/azuredatastudio?style=social)](https://twitter.com/azuredatastudio)
 
 Azure Data Studio is a data management tool that enables you to work with SQL Server, Azure SQL DB and SQL DW from Windows, macOS and Linux.
 
 ## **Download the latest Azure Data Studio release**
 
-Platform | Link
--- | --
-Windows User Installer | https://go.microsoft.com/fwlink/?linkid=2105135
-Windows System Installer | https://go.microsoft.com/fwlink/?linkid=2105134
-Windows ZIP | https://go.microsoft.com/fwlink/?linkid=2104938
-macOS ZIP | https://go.microsoft.com/fwlink/?linkid=2105133
-Linux TAR.GZ | https://go.microsoft.com/fwlink/?linkid=2105132
-Linux RPM | https://go.microsoft.com/fwlink/?linkid=2104937
-Linux DEB | https://go.microsoft.com/fwlink/?linkid=2105131
+| Platform																|
+| ---------------------------------------	|
+| [Windows User Installer][win-user]			|
+| [Windows System Installer][win-system]	|
+| [Windows ZIP][win-zip]									|
+| [macOS ZIP][osx-zip]										|
+| [Linux TAR.GZ][linux-zip]								|
+| [Linux RPM][linux-rpm]									|
+| [Linux DEB][linux-deb]									|
+
 
 Go to our [download page](https://aka.ms/azuredatastudio) for more specific instructions.
 
@@ -58,9 +60,7 @@ please see the document [How to Contribute](https://github.com/Microsoft/azureda
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
 ## Localization
-Azure Data Studio localization is now open for community contributions. You can contribute to localization for both software and docs. https://aka.ms/SQLOpsStudioLoc
-
-Localization is now opened for 10 languages: French, Italian, German, Spanish, Simplified Chinese, Traditional Chinese, Japanese, Korean, Russian, and Portuguese (Brazil). Help us make Azure Data Studio available in your language!
+Azure Data Studio is localized into 10 languages: French, Italian, German, Spanish, Simplified Chinese, Traditional Chinese, Japanese, Korean, Russian, and Portuguese (Brazil). The language packs are available in the Extension Manager marketplace. Simply, search for the specific language using the extension marketplace and install. Once you install the selected language, Azure Data Studio will prompt you to restart with the new language.
 
 ## Privacy Statement
 The [Microsoft Enterprise and Developer Privacy Statement](https://privacy.microsoft.com/en-us/privacystatement) describes the privacy statement of this software.
@@ -68,6 +68,9 @@ The [Microsoft Enterprise and Developer Privacy Statement](https://privacy.micro
 ## Contributions and "Thank You"
 We would like to thank all our users who raised issues, and in particular the following users who helped contribute fixes:
 
+* eulercamposbarros for `Prevent connections from moving on click (#7528)`
+* AlexFsmn for `Fixed issue where task icons got hidden if text was too long`
+* jamesrod817 for `Tempdb (#7022)`
 * dzsquared for `fix(snippets): ads parenthesis to sqlcreateindex snippet #7020`
 * devmattrick for `Update row count as updates are received #6642`
 * mottykohn for `In Message panel onclick scroll to line #6417`
@@ -117,17 +120,6 @@ We would like to thank all our users who raised issues, and in particular the fo
 * SebastianPfliegel `Remove sqlExtensionHelp (#312)`
 * olljanat for `Implemented npm version check (#314)`
 * Adam Machanic for helping with the `whoisactive` extension
-* All community localization contributors:
-  * French: Adrien Clerbois, ANAS BELABBES, Antoine Griffard, Arian Papillon, Eric Macarez, Eric Van Thorre, Jérémy LANDON, Matthias GROSPERRIN, Maxime COQUEREL, Olivier Guinart, thierry DEMAN-BARCELÒ, Thomas Potier
-  * Italian: Aldo Donetti, Alessandro Alpi, Andrea Dottor, Bruni Luca, Gianluca Hotz, Luca Nardi, Luigi Bruno, Marco Dal Pino, Mirco Vanini, Pasquale Ceglie, Riccardo Cappello, Sergio Govoni, Stefano Demiliani
-  * German: Anna Henke-Gunvaldson, Ben Weissman, David Ullmer, J.M. ., Kai Modo, Konstantin Staschill, Kostja Klein, Lennart Trunk, Markus Ehrenmüller-Jensen, Mascha Kroenlein, Matthias Knoll, Mourad Louha, Thomas Hütter, Wolfgang Straßer
-  * Spanish: Alberto Poblacion, Andy Gonzalez, Carlos Mendible, Christian Araujo, Daniel D, Eickhel Mendoza, Ernesto Cardenas, Ivan Toledo Ivanovic, Fran Diaz, JESUS GIL, Jorge Serrano Pérez, José Saturnino Pimentel Juárez, Mauricio Hidalgo, Pablo Iglesias, Rikhardo Estrada Rdez, Thierry DEMAN, YOLANDA CUESTA ALTIERI
-  * Japanese: Fujio Kojima, Kazushi KAMEGAWA, Masayoshi Yamada, Masayuki Ozawa, Seiji Momoto, Takashi Kanai, Takayoshi Tanaka, Yoshihisa Ozaki, 庄垣内治
-  * Chinese (simplified): DAN YE, Joel Yang, Lynne Dong, Ryan（Yu） Zhang, Sheng Jiang, Wei Zhang, Zhiliang Xu
-  * Chinese  (Traditional): Bruce Chen, Chiayi Yen, Kevin Yang,  Winnie Lin, 保哥 Will,  謝政廷
-  * Korean: Do-Kyun Kim, Evelyn Kim, Helen Jung, Hong Jmee, jeongwoo choi, Jun Hyoung Lee, Jungsun Kim정선, Justin Yoo, Kavrith mucha, Kiwoong Youm, MinGyu Ju,  MVP_JUNO BEA, Sejun Kim, SOONMAN KWON, sung man ko, Yeongrak Choi, younggun kim, Youngjae Kim, 소영 이
-  * Russian: Andrey Veselov, Anton Fontanov, Anton Savin, Elena Ostrovskaia, Igor Babichev, Maxim Zelensky, Rodion Fedechkin, Tasha T, Vladimir Zyryanov
-  * Portuguese Brazil: Daniel de Sousa, Diogo Duarte, Douglas Correa, Douglas Eccker, José Emanuel Mendes, Marcelo Fernandes, Marcondes Alexandre, Roberto Fonseca, Rodrigo Crespi
 
 And of course, we'd like to thank the authors of all upstream dependencies.  Please see a full list in the [ThirdPartyNotices.txt](https://raw.githubusercontent.com/Microsoft/azuredatastudio/master/ThirdPartyNotices.txt)
 
@@ -136,3 +128,11 @@ And of course, we'd like to thank the authors of all upstream dependencies.  Ple
 Copyright (c) Microsoft Corporation. All rights reserved.
 
 Licensed under the [Source EULA](LICENSE.txt).
+
+[win-user]: https://go.microsoft.com/fwlink/?linkid=2127522
+[win-system]: https://go.microsoft.com/fwlink/?linkid=2127432
+[win-zip]: https://go.microsoft.com/fwlink/?linkid=2127716
+[osx-zip]: https://go.microsoft.com/fwlink/?linkid=2127431
+[linux-zip]: https://go.microsoft.com/fwlink/?linkid=2127523
+[linux-rpm]: https://go.microsoft.com/fwlink/?linkid=2127433
+[linux-deb]: https://go.microsoft.com/fwlink/?linkid=2127524

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IDisposable } from 'vs/base/common/lifecycle';
-import { createDecorator, ServiceIdentifier } from 'vs/platform/instantiation/common/instantiation';
+import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 import * as azdata from 'azdata';
 import { Deferred } from 'sql/base/common/promise';
 
@@ -38,7 +38,7 @@ export class CredentialsService implements ICredentialsService {
 
 	private _serverEvents: { [handle: number]: CredentialManagementEvents; } = Object.create(null);
 
-	private _lastHandle: number;
+	private _lastHandle?: number;
 
 	private _onServerEventsReady: Deferred<void> = new Deferred<void>();
 
@@ -59,14 +59,14 @@ export class CredentialsService implements ICredentialsService {
 	}
 
 	public saveCredential(credentialId: string, password: string): Promise<boolean> {
-		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle].onSaveCredential(credentialId, password));
+		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle!].onSaveCredential(credentialId, password));
 	}
 
 	public readCredential(credentialId: string): Promise<azdata.Credential> {
-		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle].onReadCredential(credentialId));
+		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle!].onReadCredential(credentialId));
 	}
 
 	public deleteCredential(credentialId: string): Promise<boolean> {
-		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle].onDeleteCredential(credentialId));
+		return this._onServerEventsReady.promise.then(() => this._serverEvents[this._lastHandle!].onDeleteCredential(credentialId));
 	}
 }

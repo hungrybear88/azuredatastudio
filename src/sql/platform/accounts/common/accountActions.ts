@@ -75,7 +75,7 @@ export class RemoveAccountAction extends Action {
 		@INotificationService private _notificationService: INotificationService,
 		@IAccountManagementService private _accountManagementService: IAccountManagementService
 	) {
-		super(RemoveAccountAction.ID, RemoveAccountAction.LABEL, 'remove-account-action icon remove');
+		super(RemoveAccountAction.ID, RemoveAccountAction.LABEL, 'remove-account-action codicon remove');
 	}
 
 	public run(): Promise<boolean> {
@@ -115,7 +115,7 @@ export class ApplyFilterAction extends Action {
 		id: string,
 		label: string
 	) {
-		super(id, label, 'apply-filters-action icon filter');
+		super(id, label, 'apply-filters-action codicon filter');
 	}
 
 	public run(): Promise<boolean> {
@@ -130,13 +130,13 @@ export class ApplyFilterAction extends Action {
 export class RefreshAccountAction extends Action {
 	public static ID = 'account.refresh';
 	public static LABEL = localize('refreshAccount', "Reenter your credentials");
-	public account: azdata.Account;
+	public account?: azdata.Account;
 
 	constructor(
 		@IAccountManagementService private _accountManagementService: IAccountManagementService,
 		@ILogService private readonly logService: ILogService
 	) {
-		super(RefreshAccountAction.ID, RefreshAccountAction.LABEL, 'refresh-account-action icon refresh');
+		super(RefreshAccountAction.ID, RefreshAccountAction.LABEL, 'refresh-account-action codicon refresh');
 	}
 	public run(): Promise<boolean> {
 		if (this.account) {

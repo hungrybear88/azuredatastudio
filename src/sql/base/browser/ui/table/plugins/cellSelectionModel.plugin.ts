@@ -16,7 +16,7 @@ const defaults: ICellSelectionModelOptions = {
 };
 
 export class CellSelectionModel<T> implements Slick.SelectionModel<T, Array<Slick.Range>> {
-	private grid: Slick.Grid<T>;
+	private grid!: Slick.Grid<T>;
 	private selector: ICellRangeSelector<T>;
 	private ranges: Array<Slick.Range> = [];
 	private _handler = new Slick.EventHandler();
@@ -36,10 +36,10 @@ export class CellSelectionModel<T> implements Slick.SelectionModel<T, Array<Slic
 
 	public init(grid: Slick.Grid<T>) {
 		this.grid = grid;
-		this._handler.subscribe(this.grid.onClick, (e: MouseEvent, args: Slick.OnActiveCellChangedEventArgs<T>) => this.handleActiveCellChange(e, args));
-		this._handler.subscribe(this.grid.onKeyDown, (e: KeyboardEvent) => this.handleKeyDown(e));
-		this._handler.subscribe(this.grid.onClick, (e: MouseEvent, args: Slick.OnClickEventArgs<T>) => this.handleIndividualCellSelection(e, args));
-		this._handler.subscribe(this.grid.onHeaderClick, (e: MouseEvent, args: Slick.OnHeaderClickEventArgs<T>) => this.handleHeaderClick(e, args));
+		this._handler.subscribe(this.grid.onClick, (e: DOMEvent, args: Slick.OnActiveCellChangedEventArgs<T>) => this.handleActiveCellChange(e as MouseEvent, args));
+		this._handler.subscribe(this.grid.onKeyDown, (e: DOMEvent) => this.handleKeyDown(e as KeyboardEvent));
+		this._handler.subscribe(this.grid.onClick, (e: DOMEvent, args: Slick.OnClickEventArgs<T>) => this.handleIndividualCellSelection(e as MouseEvent, args));
+		this._handler.subscribe(this.grid.onHeaderClick, (e: DOMEvent, args: Slick.OnHeaderClickEventArgs<T>) => this.handleHeaderClick(e as MouseEvent, args));
 		this.grid.registerPlugin(this.selector);
 		this._handler.subscribe(this.selector.onCellRangeSelected, (e: Event, range: Slick.Range) => this.handleCellRangeSelected(e, range, false));
 		this._handler.subscribe(this.selector.onAppendCellRangeSelected, (e: Event, range: Slick.Range) => this.handleCellRangeSelected(e, range, true));
@@ -131,7 +131,7 @@ export class CellSelectionModel<T> implements Slick.SelectionModel<T, Array<Slic
 	 * DO NOT CALL THIS DIRECTLY - GO THROUGH INSERT INTO SELECTIONS
 	 *
 	 */
-	private mergeSelections(ranges: Array<Slick.Range>, range: Slick.Range) {
+	private mergeSelections(ranges: Array<Slick.Range>, range: Slick.Range): { newRanges: Array<Slick.Range>, handled: boolean } {
 		// New ranges selection
 		let newRanges: Array<Slick.Range> = [];
 
@@ -192,7 +192,7 @@ export class CellSelectionModel<T> implements Slick.SelectionModel<T, Array<Slic
 		};
 	}
 
-	private insertIntoSelections(ranges: Array<Slick.Range>, range: Slick.Range): Array<Slick.Range> {
+	public insertIntoSelections(ranges: Array<Slick.Range>, range: Slick.Range): Array<Slick.Range> {
 		let result = this.mergeSelections(ranges, range);
 		let newRanges = result.newRanges;
 

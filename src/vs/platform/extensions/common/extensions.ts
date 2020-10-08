@@ -11,6 +11,13 @@ export const MANIFEST_CACHE_FOLDER = 'CachedExtensions';
 export const USER_MANIFEST_CACHE_FILE = 'user';
 export const BUILTIN_MANIFEST_CACHE_FILE = 'builtin';
 
+export const ExtensionsPolicyKey = 'extensions.extensionsPolicy'; // {{SQL CARBON EDIT}} start
+export enum ExtensionsPolicy {
+	allowAll = 'allowAll',
+	allowNone = 'allowNone',
+	allowMicrosoft = 'allowMicrosoft'
+} // {{SQL CARBON EDIT}} - End
+
 export interface ICommand {
 	command: string;
 	title: string;
@@ -38,7 +45,7 @@ export interface IGrammar {
 }
 
 export interface IJSONValidation {
-	fileMatch: string;
+	fileMatch: string | string[];
 	url: string;
 }
 
@@ -88,6 +95,25 @@ export interface IColor {
 	defaults: { light: string, dark: string, highContrast: string };
 }
 
+export interface IWebviewEditor {
+	readonly viewType: string;
+	readonly priority: string;
+	readonly selector: readonly {
+		readonly filenamePattern?: string;
+	}[];
+}
+
+export interface ICodeActionContributionAction {
+	readonly kind: string;
+	readonly title: string;
+	readonly description?: string;
+}
+
+export interface ICodeActionContribution {
+	readonly languages: readonly string[];
+	readonly actions: readonly ICodeActionContributionAction[];
+}
+
 export interface IExtensionContributions {
 	commands?: ICommand[];
 	configuration?: IConfiguration | IConfiguration[];
@@ -104,6 +130,8 @@ export interface IExtensionContributions {
 	views?: { [location: string]: IView[] };
 	colors?: IColor[];
 	localizations?: ILocalization[];
+	readonly customEditors?: readonly IWebviewEditor[];
+	readonly codeActions?: readonly ICodeActionContribution[];
 }
 
 export type ExtensionKind = 'ui' | 'workspace' | 'web';
@@ -129,13 +157,14 @@ export interface IExtensionManifest {
 	readonly forceReload?: boolean; // {{ SQL CARBON EDIT }} add field
 	readonly description?: string;
 	readonly main?: string;
+	readonly browser?: string;
 	readonly icon?: string;
 	readonly categories?: string[];
 	readonly keywords?: string[];
 	readonly activationEvents?: string[];
 	readonly extensionDependencies?: string[];
 	readonly extensionPack?: string[];
-	readonly extensionKind?: ExtensionKind;
+	readonly extensionKind?: ExtensionKind | ExtensionKind[];
 	readonly contributes?: IExtensionContributions;
 	readonly repository?: { url: string; };
 	readonly bugs?: { url: string; };
@@ -218,8 +247,7 @@ export interface IExtensionDescription extends IExtensionManifest {
 	readonly isUnderDevelopment: boolean;
 	readonly extensionLocation: URI;
 	enableProposedApi?: boolean;
-	// {{ SQL CARBON EDIT }}
-	readonly forceReload?: boolean;
+	readonly forceReload?: boolean; // {{ SQL CARBON EDIT }}
 }
 
 export function isLanguagePackExtension(manifest: IExtensionManifest): boolean {

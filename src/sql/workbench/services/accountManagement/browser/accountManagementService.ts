@@ -12,14 +12,20 @@ import { IStorageService, StorageScope } from 'vs/platform/storage/common/storag
 import { Memento } from 'vs/workbench/common/memento';
 
 import AccountStore from 'sql/platform/accounts/common/accountStore';
-import { AccountDialogController } from 'sql/platform/accounts/browser/accountDialogController';
-import { AutoOAuthDialogController } from 'sql/platform/accounts/browser/autoOAuthDialogController';
+import { AccountDialogController } from 'sql/workbench/services/accountManagement/browser/accountDialogController';
+import { AutoOAuthDialogController } from 'sql/workbench/services/accountManagement/browser/autoOAuthDialogController';
 import { AccountProviderAddedEventParams, UpdateAccountListEventParams } from 'sql/platform/accounts/common/eventTypes';
 import { IAccountManagementService } from 'sql/platform/accounts/common/interfaces';
 import { Deferred } from 'sql/base/common/promise';
 import { localize } from 'vs/nls';
 import { IOpenerService } from 'vs/platform/opener/common/opener';
 import { URI } from 'vs/base/common/uri';
+import { firstIndex } from 'vs/base/common/arrays';
+import { values } from 'vs/base/common/collections';
+import { onUnexpectedError } from 'vs/base/common/errors';
+import { ILogService } from 'vs/platform/log/common/log';
+import { INotificationService, Severity, INotification } from 'vs/platform/notification/common/notification';
+import { Action } from 'vs/base/common/actions';
 
 export class AccountManagementService implements IAccountManagementService {
 	// CONSTANTS ///////////////////////////////////////////////////////////
@@ -49,7 +55,9 @@ export class AccountManagementService implements IAccountManagementService {
 		@IInstantiationService private _instantiationService: IInstantiationService,
 		@IStorageService private _storageService: IStorageService,
 		@IClipboardService private _clipboardService: IClipboardService,
-		@IOpenerService private _openerService: IOpenerService
+		@IOpenerService private _openerService: IOpenerService,
+		@ILogService private readonly _logService: ILogService,
+		@INotificationService private readonly _notificationService,
 	) {
 		// Create the account store
 		if (!this._mementoObj) {
@@ -102,12 +110,7 @@ export class AccountManagementService implements IAccountManagementService {
 					}
 					return Promise.resolve();
 				});
-		}).then(
-			() => { },
-			reason => {
-				console.warn(`Account update handler encountered error: ${reason}`);
-			}
-		);
+		});
 
 	}
 
@@ -117,24 +120,40 @@ export class AccountManagementService implements IAccountManagementService {
 	 * @return Promise to return an account
 	 */
 	public addAccount(providerId: string): Thenable<void> {
-		let self = this;
+		const closeAction: Action = new Action('closeAddingAccount', localize('accountManagementService.close', "Close"), undefined, true);
+
+		const loginNotification: INotification = {
+			severity: Severity.Info,
+			message: localize('loggingIn', "Adding account..."),
+			progress: {
+				infinite: true
+			},
+			actions: {
+				primary: [closeAction]
+			}
+		};
 
 		return this.doWithProvider(providerId, async (provider) => {
-			let account = await provider.provider.prompt();
-			if (self.isCanceledResult(account)) {
-				return;
-			}
+			const notificationHandler = this._notificationService.notify(loginNotification);
+			try {
+				let account = await provider.provider.prompt();
+				if (this.isCanceledResult(account)) {
+					return;
+				}
 
-			let result = await self._accountStore.addOrUpdate(account);
-			if (result.accountAdded) {
-				// Add the account to the list
-				provider.accounts.push(result.changedAccount);
-			}
-			if (result.accountModified) {
-				self.spliceModifiedAccount(provider, result.changedAccount);
-			}
+				let result = await this._accountStore.addOrUpdate(account);
+				if (result.accountAdded) {
+					// Add the account to the list
+					provider.accounts.push(result.changedAccount);
+				}
+				if (result.accountModified) {
+					this.spliceModifiedAccount(provider, result.changedAccount);
+				}
 
-			self.fireAccountListUpdate(provider, result.accountAdded);
+				this.fireAccountListUpdate(provider, result.accountAdded);
+			} finally {
+				notificationHandler.close();
+			}
 		});
 	}
 
@@ -166,7 +185,7 @@ export class AccountManagementService implements IAccountManagementService {
 			}
 			if (result.accountModified) {
 				// Find the updated account and splice the updated on in
-				let indexToRemove: number = provider.accounts.findIndex(account => {
+				let indexToRemove: number = firstIndex(provider.accounts, account => {
 					return account.key.accountId === result.changedAccount.key.accountId;
 				});
 				if (indexToRemove >= 0) {
@@ -184,7 +203,7 @@ export class AccountManagementService implements IAccountManagementService {
 	 * @returns Registered account providers
 	 */
 	public getAccountProviderMetadata(): Thenable<azdata.AccountProviderMetadata[]> {
-		return Promise.resolve(Object.values(this._providers).map(provider => provider.metadata));
+		return Promise.resolve(values(this._providers).map(provider => provider.metadata));
 	}
 
 	/**
@@ -207,6 +226,13 @@ export class AccountManagementService implements IAccountManagementService {
 	}
 
 	/**
+	 * Retrieves all the accounts registered with ADS.
+	 */
+	public getAccounts(): Thenable<azdata.Account[]> {
+		return this._accountStore.getAllAccounts();
+	}
+
+	/**
 	 * Generates a security token by asking the account's provider
 	 * @param account Account to generate security token for
 	 * @param resource The resource to get the security token for
@@ -225,33 +251,47 @@ export class AccountManagementService implements IAccountManagementService {
 	 *                           removed, false otherwise.
 	 */
 	public removeAccount(accountKey: azdata.AccountKey): Thenable<boolean> {
-		let self = this;
 
 		// Step 1) Remove the account
 		// Step 2) Clear the sensitive data from the provider (regardless of whether the account was removed)
 		// Step 3) Update the account cache and fire an event
-		return this.doWithProvider(accountKey.providerId, provider => {
-			return this._accountStore.remove(accountKey)
-				.then(result => {
-					provider.provider.clear(accountKey);
-					return result;
-				})
-				.then(result => {
-					if (!result) {
-						return result;
-					}
+		return this.doWithProvider(accountKey.providerId, async provider => {
+			const result = await this._accountStore.remove(accountKey);
+			await provider.provider.clear(accountKey);
+			if (!result) {
+				return result;
+			}
 
-					let indexToRemove: number = provider.accounts.findIndex(account => {
-						return account.key.accountId === accountKey.accountId;
-					});
+			let indexToRemove: number = firstIndex(provider.accounts, account => {
+				return account.key.accountId === accountKey.accountId;
+			});
 
-					if (indexToRemove >= 0) {
-						provider.accounts.splice(indexToRemove, 1);
-						self.fireAccountListUpdate(provider, false);
-					}
-					return result;
-				});
+			if (indexToRemove >= 0) {
+				provider.accounts.splice(indexToRemove, 1);
+				this.fireAccountListUpdate(provider, false);
+			}
+			return result;
 		});
+	}
+
+	/**
+	 * Removes all registered accounts
+	 */
+	public async removeAccounts(): Promise<boolean> {
+		const accounts = await this.getAccounts();
+		if (accounts.length === 0) {
+			return false;
+		}
+
+		let finalResult = true;
+		for (const account of accounts) {
+			const removeResult = await this.removeAccount(account.key);
+			if (removeResult === false) {
+				this._logService.info('Error when removing %s.', account.key);
+				finalResult = false;
+			}
+		}
+		return finalResult;
 	}
 
 	// UI METHODS //////////////////////////////////////////////////////////
@@ -303,7 +343,7 @@ export class AccountManagementService implements IAccountManagementService {
 		this.doWithProvider(providerId, provider => provider.provider.autoOAuthCancelled())
 			.then(	// Swallow errors
 				null,
-				err => { console.warn(`Error when cancelling auto OAuth: ${err}`); }
+				err => { this._logService.warn(`Error when cancelling auto OAuth: ${err}`); }
 			)
 			.then(() => this.autoOAuthDialogController.closeAutoOAuthDialog());
 	}
@@ -312,8 +352,8 @@ export class AccountManagementService implements IAccountManagementService {
 	 * Copy the user code to the clipboard and open a browser to the verification URI
 	 */
 	public copyUserCodeAndOpenBrowser(userCode: string, uri: string): void {
-		this._clipboardService.writeText(userCode);
-		this._openerService.open(URI.parse(uri));
+		this._clipboardService.writeText(userCode).catch(err => onUnexpectedError(err));
+		this._openerService.open(URI.parse(uri)).catch(err => onUnexpectedError(err));
 	}
 
 	// SERVICE MANAGEMENT METHODS //////////////////////////////////////////
@@ -423,7 +463,7 @@ export class AccountManagementService implements IAccountManagementService {
 
 	private spliceModifiedAccount(provider: AccountProviderWithMetadata, modifiedAccount: azdata.Account) {
 		// Find the updated account and splice the updated one in
-		let indexToRemove: number = provider.accounts.findIndex(account => {
+		let indexToRemove: number = firstIndex(provider.accounts, account => {
 			return account.key.accountId === modifiedAccount.key.accountId;
 		});
 		if (indexToRemove >= 0) {

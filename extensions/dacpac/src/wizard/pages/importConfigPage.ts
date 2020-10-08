@@ -3,17 +3,13 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
 import * as azdata from 'azdata';
-import * as nls from 'vscode-nls';
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as os from 'os';
+import * as loc from '../../localizedConstants';
 import { DacFxDataModel } from '../api/models';
 import { DataTierApplicationWizard } from '../dataTierApplicationWizard';
 import { DacFxConfigPage } from '../api/dacFxConfigPage';
-
-const localize = nls.loadMessageBundle();
+import { generateDatabaseName } from '../api/utils';
 
 export class ImportConfigPage extends DacFxConfigPage {
 
@@ -30,7 +26,7 @@ export class ImportConfigPage extends DacFxConfigPage {
 	}
 
 	async start(): Promise<boolean> {
-		let databaseComponent = await this.createDatabaseTextBox();
+		let databaseComponent = await this.createDatabaseTextBox(loc.targetDatabase);
 		let serverComponent = await this.createServerDropdown(true);
 		let fileBrowserComponent = await this.createFileBrowser();
 
@@ -50,6 +46,8 @@ export class ImportConfigPage extends DacFxConfigPage {
 
 	async onPageEnter(): Promise<boolean> {
 		let r1 = await this.populateServerDropdown();
+		// get existing database values to verify if new database name is valid
+		await this.getDatabaseValues();
 		return r1;
 	}
 
@@ -63,7 +61,7 @@ export class ImportConfigPage extends DacFxConfigPage {
 					canSelectFolders: false,
 					canSelectMany: false,
 					defaultUri: vscode.Uri.file(this.getRootPath()),
-					openLabel: localize('dacFxImport.openFile', 'Open'),
+					openLabel: loc.open,
 					filters: {
 						'bacpac Files': ['bacpac'],
 					}
@@ -77,25 +75,20 @@ export class ImportConfigPage extends DacFxConfigPage {
 			let fileUri = fileUris[0];
 			this.fileTextBox.value = fileUri.fsPath;
 			this.model.filePath = fileUri.fsPath;
-			this.model.database = this.generateDatabaseName(this.model.filePath);
+			this.model.database = generateDatabaseName(this.model.filePath);
 			this.databaseTextBox.value = this.model.database;
 		});
 
 		this.fileTextBox.onTextChanged(async () => {
 			this.model.filePath = this.fileTextBox.value;
-			this.model.database = this.generateDatabaseName(this.model.filePath);
+			this.model.database = generateDatabaseName(this.model.filePath);
 			this.databaseTextBox.value = this.model.database;
 		});
 
 		return {
 			component: this.fileTextBox,
-			title: localize('dacFxImport.fileTextboxTitle', 'File Location'),
+			title: loc.fileLocation,
 			actions: [this.fileButton]
 		};
-	}
-
-	private generateDatabaseName(filePath: string): string {
-		let result = path.parse(filePath);
-		return result.name;
 	}
 }

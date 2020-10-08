@@ -85,7 +85,7 @@ suite('TableDataView', () => {
 			const ret = new Array<number>();
 			for (let i = 0; i < columnCount; i++) {
 				const colVal = val[getColumnName(i)];
-				if (colVal && colVal.toLocaleLowerCase().includes(exp.toLocaleLowerCase())) {
+				if (colVal && colVal.toLocaleLowerCase().indexOf(exp.toLocaleLowerCase()) > -1) {
 					ret.push(i);
 				}
 			}
@@ -118,7 +118,7 @@ suite('TableDataView', () => {
 			const ret = new Array<number>();
 			for (let i = 0; i < columnCount; i++) {
 				const colVal = val[getColumnName(i)];
-				if (colVal && colVal.toLocaleLowerCase().includes(exp.toLocaleLowerCase())) {
+				if (colVal && colVal.toLocaleLowerCase().indexOf(exp.toLocaleLowerCase()) > -1) {
 					ret.push(i);
 				}
 			}
@@ -156,7 +156,7 @@ suite('TableDataView', () => {
 			const ret = new Array<number>();
 			for (let i = 0; i < columnCount; i++) {
 				const colVal = val[getColumnName(i)];
-				if (colVal && colVal.toLocaleLowerCase().includes(exp.toLocaleLowerCase())) {
+				if (colVal && colVal.toLocaleLowerCase().indexOf(exp.toLocaleLowerCase()) > -1) {
 					ret.push(i);
 				}
 			}
@@ -178,7 +178,7 @@ suite('TableDataView', () => {
 function populateData(row: number, column: number): any[] {
 	let data: Array<{ [key: string]: string }> = [];
 	for (let i: number = 0; i < row; i++) {
-		let row = {};
+		let row: { [key: string]: string } = {};
 		for (let j: number = 0; j < column; j++) {
 			row[getColumnName(j)] = getCellValue(i, j);
 		}

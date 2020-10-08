@@ -5,21 +5,15 @@
 
 'use strict';
 const gulp = require('gulp');
-const util = require('./lib/util');
 const tsfmt = require('typescript-formatter');
 const es = require('event-stream');
 const filter = require('gulp-filter');
-const del = require('del');
-const serviceDownloader = require('service-downloader').ServiceDownloadProvider;
-const platformInfo = require('service-downloader/out/platform').PlatformInformation;
 const path = require('path');
-const fs = require('fs');
-const rollup = require('rollup');
-const rollupNodeResolve = require('rollup-plugin-node-resolve');
-const rollupCommonJS = require('rollup-plugin-commonjs');
-
-gulp.task('clean-mssql-extension', util.rimraf('extensions/mssql/node_modules'));
-gulp.task('clean-credentials-extension', util.rimraf('extensions/credentials/node_modules'));
+const ext = require('./lib/extensions');
+const task = require('./lib/task');
+const glob = require('glob');
+const vsce = require('vsce');
+const mkdirp = require('mkdirp');
 
 gulp.task('fmt', () => formatStagedFiles());
 const formatFiles = (some) => {
@@ -95,104 +89,33 @@ const formatStagedFiles = () => {
 	});
 };
 
-function installService() {
-	let config = require('../extensions/mssql/config.json');
-	return platformInfo.getCurrent().then(p => {
-		let runtime = p.runtimeId;
-		// fix path since it won't be correct
-		config.installDirectory = path.join(__dirname, '../extensions/mssql/src', config.installDirectory);
-		var installer = new serviceDownloader(config);
-		let serviceInstallFolder = installer.getInstallDirectory(runtime);
-		console.log('Cleaning up the install folder: ' + serviceInstallFolder);
-		return del(serviceInstallFolder + '/*').then(() => {
-			console.log('Installing the service. Install folder: ' + serviceInstallFolder);
-			return installer.installService(runtime);
-		}, delError => {
-			console.log('failed to delete the install folder error: ' + delError);
-		});
-	});
-}
+const root = path.dirname(__dirname);
 
-gulp.task('install-sqltoolsservice', () => {
-	return installService();
-});
-
-function installSsmsMin() {
-	const config = require('../extensions/admin-tool-ext-win/config.json');
-	return platformInfo.getCurrent().then(p => {
-		const runtime = p.runtimeId;
-		// fix path since it won't be correct
-		config.installDirectory = path.join(__dirname, '..', 'extensions', 'admin-tool-ext-win', config.installDirectory);
-		var installer = new serviceDownloader(config);
-		const serviceInstallFolder = installer.getInstallDirectory(runtime);
-		const serviceCleanupFolder = path.join(serviceInstallFolder, '..');
-		console.log('Cleaning up the install folder: ' + serviceCleanupFolder);
-		return del(serviceCleanupFolder + '/*').then(() => {
-			console.log('Installing the service. Install folder: ' + serviceInstallFolder);
-			return installer.installService(runtime);
-		}, delError => {
-			console.log('failed to delete the install folder error: ' + delError);
-		});
-	});
-}
-
-gulp.task('install-ssmsmin', () => {
-	return installSsmsMin();
-});
-
-async function rollupModule(options) {
-	const moduleName = options.moduleName;
-	try {
-		const inputFile = options.inputFile;
-		const outputDirectory = options.outputDirectory;
-
-		await fs.promises.mkdir(outputDirectory, {
-			recursive: true
+gulp.task('package-external-extensions', task.series(
+	task.define('bundle-external-extensions-build', () => ext.packageExternalExtensionsStream().pipe(gulp.dest('.build/external'))),
+	task.define('create-external-extension-vsix-build', () => {
+		const vsixes = glob.sync('.build/external/extensions/*/package.json').map(manifestPath => {
+			const extensionPath = path.dirname(path.join(root, manifestPath));
+			const extensionName = path.basename(extensionPath);
+			return { name: extensionName, path: extensionPath };
+		}).map(element => {
+			const pkgJson = require(path.join(element.path, 'package.json'));
+			const vsixDirectory = path.join(root, '.build', 'extensions');
+			mkdirp.sync(vsixDirectory);
+			const packagePath = path.join(vsixDirectory, `${pkgJson.name}-${pkgJson.version}.vsix`);
+			console.info('Creating vsix for ' + element.path + ' result:' + packagePath);
+			return vsce.createVSIX({
+				cwd: element.path,
+				packagePath: packagePath,
+				useYarn: true
+			});
 		});
 
-		const outputFileName = options.outputFileName;
-		const outputMapName = `${outputFileName}.map`;
-		const external = options.external || [];
+		return Promise.all(vsixes);
+	})
+));
 
-		const outputFilePath = path.resolve(outputDirectory, outputFileName);
-		const outputMapPath = path.resolve(outputDirectory, outputMapName);
-
-		const bundle = await rollup.rollup({
-			input: inputFile,
-			plugins: [
-				rollupNodeResolve(),
-				rollupCommonJS(),
-			],
-			external,
-		});
-
-		const generatedBundle = await bundle.generate({
-			output: {
-				name: moduleName
-			},
-			format: 'umd',
-			sourcemap: true
-		});
-
-		const result = generatedBundle.output[0];
-		result.code = result.code + '\n//# sourceMappingURL=' + path.basename(outputMapName);
-
-		await fs.promises.writeFile(outputFilePath, result.code);
-		await fs.promises.writeFile(outputMapPath, result.map);
-
-		return {
-			name: moduleName,
-			result: true
-		};
-	} catch (ex) {
-		return {
-			name: moduleName,
-			result: false,
-			exception: ex
-		};
-	}
-}
-
-module.exports = {
-	rollupModule
-};
+gulp.task('package-rebuild-extensions', task.series(
+	task.define('clean-rebuild-extensions', () => ext.cleanRebuildExtensions('.build/extensions')),
+	task.define('rebuild-extensions-build', () => ext.packageRebuildExtensionsStream().pipe(gulp.dest('.build'))),
+));

@@ -9,14 +9,14 @@ import { IExtHostContext } from 'vs/workbench/api/common/extHost.protocol';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 
 import { MainThreadModelViewDialogShape, SqlMainContext, ExtHostModelViewDialogShape, SqlExtHostContext } from 'sql/workbench/api/common/sqlExtHost.protocol';
-import { Dialog, DialogTab, DialogButton, WizardPage, Wizard } from 'sql/platform/dialog/common/dialogTypes';
-import { CustomDialogService } from 'sql/platform/dialog/browser/customDialogService';
+import { Dialog, DialogTab, DialogButton, WizardPage, Wizard } from 'sql/workbench/services/dialog/common/dialogTypes';
+import { CustomDialogService, DefaultWizardOptions, DefaultDialogOptions } from 'sql/workbench/services/dialog/browser/customDialogService';
 import { IModelViewDialogDetails, IModelViewTabDetails, IModelViewButtonDetails, IModelViewWizardPageDetails, IModelViewWizardDetails } from 'sql/workbench/api/common/sqlExtHostTypes';
 import { ModelViewInput, ModelViewInputModel, ModeViewSaveHandler } from 'sql/workbench/browser/modelComponents/modelViewInput';
 
 import * as vscode from 'vscode';
 import * as azdata from 'azdata';
-import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
+import { assign } from 'vs/base/common/objects';
 
 @extHostNamedCustomer(SqlMainContext.MainThreadModelViewDialog)
 export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape {
@@ -33,8 +33,7 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 	constructor(
 		context: IExtHostContext,
 		@IInstantiationService private _instatiationService: IInstantiationService,
-		@IEditorService private _editorService: IEditorService,
-		@ITelemetryService private _telemetryService: ITelemetryService
+		@IEditorService private _editorService: IEditorService
 	) {
 		this._proxy = context.getProxy(SqlExtHostContext.ExtHostModelViewDialog);
 		this._dialogService = new CustomDialogService(_instatiationService);
@@ -69,7 +68,9 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 
 	public $openDialog(handle: number, dialogName?: string): Thenable<void> {
 		let dialog = this.getDialog(handle);
-		this._dialogService.showDialog(dialog, dialogName, { hasBackButton: false, isWide: dialog.isWide, hasErrors: true });
+		const options = assign({}, DefaultDialogOptions);
+		options.width = dialog.width;
+		this._dialogService.showDialog(dialog, dialogName, options);
 		return Promise.resolve();
 	}
 
@@ -93,7 +94,7 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 		}
 
 		dialog.title = details.title;
-		dialog.isWide = details.isWide;
+		dialog.width = details.width;
 		if (details.content && typeof details.content !== 'string') {
 			dialog.content = details.content.map(tabHandle => this.getTab(tabHandle));
 		} else {
@@ -126,6 +127,7 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 		let button = this._buttons.get(handle);
 		if (!button) {
 			button = new DialogButton(details.label, details.enabled);
+			button.position = details.position;
 			button.hidden = details.hidden;
 			button.onClick(() => this.onButtonClick(handle));
 			this._buttons.set(handle, button);
@@ -134,6 +136,7 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 			button.enabled = details.enabled;
 			button.hidden = details.hidden;
 			button.focused = details.focused;
+			button.position = details.position;
 		}
 
 		return Promise.resolve();
@@ -163,6 +166,7 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 		let wizard = this._wizards.get(handle);
 		if (!wizard) {
 			wizard = new Wizard(details.title);
+			wizard.width = details.width;
 			wizard.backButton = this.getButton(details.backButton);
 			wizard.cancelButton = this.getButton(details.cancelButton);
 			wizard.generateScriptButton = this.getButton(details.generateScriptButton);
@@ -213,7 +217,9 @@ export class MainThreadModelViewDialog implements MainThreadModelViewDialogShape
 
 	public $openWizard(handle: number): Thenable<void> {
 		let wizard = this.getWizard(handle);
-		this._dialogService.showWizard(wizard);
+		const options = assign({}, DefaultWizardOptions);
+		options.width = wizard.width;
+		this._dialogService.showWizard(wizard, options);
 		return Promise.resolve();
 	}
 

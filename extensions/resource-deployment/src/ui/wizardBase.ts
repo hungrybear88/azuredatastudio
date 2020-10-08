@@ -10,9 +10,9 @@ import { WizardPageBase } from './wizardPageBase';
 import { Model } from './model';
 const localize = nls.loadMessageBundle();
 
-export abstract class WizardBase<T, M extends Model> {
+export abstract class WizardBase<T, P extends WizardPageBase<T>, M extends Model> {
 	private customButtons: azdata.window.Button[] = [];
-	private pages: WizardPageBase<T>[] = [];
+	public pages: P[] = [];
 
 	public wizardObject: azdata.window.Wizard;
 	public toDispose: vscode.Disposable[] = [];
@@ -34,8 +34,8 @@ export abstract class WizardBase<T, M extends Model> {
 			newPage.onEnter();
 		}));
 
-		this.toDispose.push(this.wizardObject.doneButton.onClick(() => {
-			this.onOk();
+		this.toDispose.push(this.wizardObject.doneButton.onClick(async () => {
+			await this.onOk();
 			this.dispose();
 		}));
 		this.toDispose.push(this.wizardObject.cancelButton.onClick(() => {
@@ -52,14 +52,14 @@ export abstract class WizardBase<T, M extends Model> {
 	}
 
 	protected abstract initialize(): void;
-	protected abstract onOk(): void;
+	protected abstract async onOk(): Promise<void>;
 	protected abstract onCancel(): void;
 
 	public addButton(button: azdata.window.Button) {
 		this.customButtons.push(button);
 	}
 
-	protected setPages(pages: WizardPageBase<T>[]) {
+	protected setPages(pages: P[]) {
 		this.wizardObject!.pages = pages.map(p => p.pageObject);
 		this.pages = pages;
 		this.pages.forEach((page) => {
@@ -68,19 +68,19 @@ export abstract class WizardBase<T, M extends Model> {
 	}
 
 	private dispose() {
-		let errorOccured = false;
+		let errorOccurred = false;
 		this.toDispose.forEach((disposable: vscode.Disposable) => {
 			try {
 				disposable.dispose();
 			}
 			catch (error) {
-				errorOccured = true;
+				errorOccurred = true;
 				console.error(error);
 			}
 		});
 
-		if (errorOccured) {
-			vscode.window.showErrorMessage(localize('resourceDeployment.DisposableError', "Error occured while closing the wizard: {0}, open 'Debugger Console' for more information."), this.title);
+		if (errorOccurred) {
+			vscode.window.showErrorMessage(localize('resourceDeployment.DisposableError', "Error occurred while closing the wizard: {0}, open 'Debugger Console' for more information."), this.title);
 		}
 	}
 

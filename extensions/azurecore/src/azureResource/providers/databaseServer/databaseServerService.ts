@@ -3,29 +3,34 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
 
-import { ServiceClientCredentials } from 'ms-rest';
-import { SqlManagementClient } from 'azure-arm-sql';
-
+import { ResourceServiceBase, GraphData } from '../resourceTreeDataProviderBase';
 import { azureResource } from '../../azure-resource';
-import { IAzureResourceDatabaseServerService } from './interfaces';
-import { AzureResourceDatabaseServer } from './models';
 
-export class AzureResourceDatabaseServerService implements IAzureResourceDatabaseServerService {
-	public async getDatabaseServers(subscription: azureResource.AzureResourceSubscription, credential: ServiceClientCredentials): Promise<AzureResourceDatabaseServer[]> {
-		const databaseServers: AzureResourceDatabaseServer[] = [];
 
-		const sqlManagementClient = new SqlManagementClient(credential, subscription.id);
-		const svrs = await sqlManagementClient.servers.list();
+export interface DbServerGraphData extends GraphData {
+	properties: {
+		fullyQualifiedDomainName: string;
+		administratorLogin: string;
+	};
+}
 
-		svrs.forEach((svr) => databaseServers.push({
-			name: svr.name,
-			fullName: svr.fullyQualifiedDomainName,
-			loginName: svr.administratorLogin,
-			defaultDatabaseName: 'master'
-		}));
+export const serversQuery = 'where type == "microsoft.sql/servers"';
 
-		return databaseServers;
+export class AzureResourceDatabaseServerService extends ResourceServiceBase<DbServerGraphData, azureResource.AzureResourceDatabaseServer> {
+
+	protected get query(): string {
+		return serversQuery;
+	}
+
+	protected convertResource(resource: DbServerGraphData): azureResource.AzureResourceDatabaseServer {
+		return {
+			id: resource.id,
+			name: resource.name,
+			fullName: resource.properties.fullyQualifiedDomainName,
+			loginName: resource.properties.administratorLogin,
+			defaultDatabaseName: 'master',
+			tenant: resource.tenantId
+		};
 	}
 }

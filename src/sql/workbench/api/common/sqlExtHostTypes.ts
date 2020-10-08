@@ -41,6 +41,11 @@ export enum EditRowState {
 	dirtyUpdate = 3
 }
 
+export enum ExtensionNodeType {
+	Server = 'Server',
+	Database = 'Database'
+}
+
 export enum TaskStatus {
 	NotStarted = 0,
 	InProgress = 1,
@@ -167,7 +172,15 @@ export enum ModelComponentTypes {
 	DiffEditor,
 	Dom,
 	Hyperlink,
-	Image
+	Image,
+	RadioCardGroup,
+	TabbedPanel,
+	Separator,
+	PropertiesContainer
+}
+
+export enum ModelViewAction {
+	SelectTab = 'selectTab'
 }
 
 export enum ColumnSizingMode {
@@ -198,9 +211,10 @@ export enum StepCompletionAction {
 	GoToStep = 4
 }
 
-export enum ExtensionNodeType {
-	Server = 'Server',
-	Database = 'Database'
+export interface CheckBoxInfo {
+	row: number;
+	columnName: string;
+	checked: boolean;
 }
 
 export interface IComponentShape {
@@ -235,12 +249,12 @@ export interface IComponentEventArgs {
 
 export interface IModelViewDialogDetails {
 	title: string;
-	isWide: boolean;
 	content: string | number[];
 	okButton: number;
 	cancelButton: number;
 	customButtons: number[];
 	message: DialogMessage;
+	width: DialogWidth;
 }
 
 export interface IModelViewTabDetails {
@@ -253,6 +267,7 @@ export interface IModelViewButtonDetails {
 	enabled: boolean;
 	hidden: boolean;
 	focused?: boolean;
+	position?: 'left' | 'right';
 }
 
 export interface IModelViewWizardPageDetails {
@@ -275,7 +290,10 @@ export interface IModelViewWizardDetails {
 	customButtons: number[];
 	message: DialogMessage;
 	displayPageTitles: boolean;
+	width: DialogWidth;
 }
+
+export type DialogWidth = 'narrow' | 'medium' | 'wide' | number;
 
 export enum MessageLevel {
 	Error = 0,
@@ -335,14 +353,16 @@ export enum DataProviderType {
 	CapabilitiesProvider = 'CapabilitiesProvider',
 	ObjectExplorerNodeProvider = 'ObjectExplorerNodeProvider',
 	SerializationProvider = 'SerializationProvider',
-	IconProvider = 'IconProvider'
+	IconProvider = 'IconProvider',
+	SqlAssessmentServicesProvider = 'SqlAssessmentServicesProvider'
 }
 
 export enum DeclarativeDataType {
 	string = 'string',
 	category = 'category',
 	boolean = 'boolean',
-	editableCategory = 'editableCategory'
+	editableCategory = 'editableCategory',
+	component = 'component'
 }
 
 export enum CardType {
@@ -356,6 +376,22 @@ export enum Orientation {
 	Vertical = 'vertial'
 }
 
+/**
+ * The possible values of the server engine edition
+ */
+export enum DatabaseEngineEdition {
+	Unknown = 0,
+	Personal = 1,
+	Standard = 2,
+	Enterprise = 3,
+	Express = 4,
+	SqlDatabase = 5,
+	SqlDataWarehouse = 6,
+	SqlStretchDatabase = 7,
+	SqlManagedInstance = 8,
+	SqlOnDemand = 11
+}
+
 export interface ToolbarLayout {
 	orientation: Orientation;
 }
@@ -367,13 +403,17 @@ export class TreeComponentItem extends vsExtTypes.TreeItem {
 
 export enum AzureResource {
 	ResourceManagement = 0,
-	Sql = 1
+	Sql = 1,
+	OssRdbms = 2,
+	AzureKeyVault = 3,
+	Graph = 4,
+	MicrosoftResourceManagement = 5
 }
 
 export class TreeItem extends vsExtTypes.TreeItem {
 	label?: string;
-	payload: IConnectionProfile;
-	providerHandle: string;
+	payload?: IConnectionProfile;
+	providerHandle?: string;
 }
 
 export interface ServerInfoOption {
@@ -548,7 +588,7 @@ export class CellRange {
 	}
 
 	constructor(start: number, end: number) {
-		if (typeof (start) !== 'number' || typeof (start) !== 'number' || start < 0 || end < 0) {
+		if (typeof (start) !== 'number' || typeof (end) !== 'number' || start < 0 || end < 0) {
 			throw new Error('Invalid arguments');
 		}
 
@@ -674,9 +714,17 @@ export class ConnectionProfile {
 		this.options['azureTenantId'] = value;
 	}
 
-	options: Map<string, any> = new Map<string, any>();
+	get azureAccount(): string {
+		return this.options['azureAccount'];
+	}
 
-	static createFrom(options: Map<string, any>): ConnectionProfile {
+	set azureAccount(value: string) {
+		this.options['azureAccount'] = value;
+	}
+
+	options: { [key: string]: any } = {};
+
+	static createFrom(options: { [key: string]: any }): ConnectionProfile {
 		let profile = new ConnectionProfile();
 		profile.options = options;
 		return profile;
@@ -791,3 +839,25 @@ export type QueryEventType =
 	| 'queryStop'
 	| 'executionPlan'
 	| 'visualize';
+
+export enum TabOrientation {
+	Vertical = 'vertical',
+	Horizontal = 'horizontal'
+}
+
+export interface TabbedPanelLayout {
+	orientation: TabOrientation;
+	showIcon: boolean;
+	alwaysShowTabs: boolean;
+}
+
+export enum SqlAssessmentTargetType {
+	Server = 1,
+	Database = 2
+}
+
+export enum SqlAssessmentResultItemKind {
+	RealResult = 0,
+	Warning = 1,
+	Error = 2
+}

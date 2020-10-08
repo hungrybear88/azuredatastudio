@@ -15,7 +15,7 @@ import { NotebookService } from 'sql/workbench/services/notebook/browser/noteboo
 import { INotebookProvider } from 'sql/workbench/services/notebook/browser/notebookService';
 import { INotebookManagerDetails, INotebookSessionDetails, INotebookKernelDetails, INotebookFutureDetails } from 'sql/workbench/api/common/sqlExtHostTypes';
 import { LocalContentManager } from 'sql/workbench/services/notebook/common/localContentManager';
-import { TestLifecycleService, TestEnvironmentService } from 'vs/workbench/test/workbenchTestServices';
+import { TestLifecycleService, TestEnvironmentService } from 'vs/workbench/test/browser/workbenchTestServices';
 import { MockContextKeyService } from 'vs/platform/keybinding/test/common/mockKeybindingService';
 import { ExtHostNotebookShape } from 'sql/workbench/api/common/sqlExtHost.protocol';
 import { TestInstantiationService } from 'vs/platform/instantiation/test/common/instantiationServiceMock';
@@ -42,10 +42,8 @@ suite('MainThreadNotebook Tests', () => {
 
 	suite('On registering a provider', () => {
 		let provider: INotebookProvider;
-		let registeredProviderId: string;
 		setup(() => {
 			mockNotebookService.setup(s => s.registerProvider(TypeMoq.It.isAnyString(), TypeMoq.It.isAny())).returns((id, providerImpl) => {
-				registeredProviderId = id;
 				provider = providerImpl;
 			});
 		});
